@@ -42,6 +42,7 @@ uv.lock
 .env.local
 
 # 工作目录
+.worktrees/
 work/
 output/
 logs/
