@@ -19,7 +19,6 @@ from __future__ import annotations
 import hashlib
 import tempfile
 from pathlib import Path
-from typing import Optional
 
 from models import ContentItem, ParsedDocument
 from utils.logger import get_logger
@@ -35,12 +34,20 @@ _MIN_CONTENT_LENGTH = 10
 _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".webp"}
 _OFFICE_SUFFIXES = {".docx", ".doc"}
 
+# docling label → heading 映射集合
+_HEADING_LABELS: frozenset[str] = frozenset({"title", "section_header", "heading", "header"})
+
 # docling 可映射为 text 类型的所有已知 label（用于检测 API 变更）
 _KNOWN_TEXT_LABELS = frozenset({
     "text", "paragraph", "section_header", "list_item",
     "code", "formula", "footnote", "caption", "page_header",
     "page_footer", "title",
 })
+
+
+def _detect_block_type(max_font_size: float, body_font_size: float) -> str:
+    """根据字号比例判断 block 类型。"""
+    return "heading" if max_font_size >= body_font_size * 1.2 else "text"
 
 
 def _make_doc_id(path: Path) -> str:
@@ -157,8 +164,46 @@ class DocumentParser:
 
         with fitz.open(str(path)) as doc:
             for page_num, page in enumerate(doc):
+                # 收集字号信息（用于区分标题与正文），失败时退化为空列表
+                try:
+                    page_dict = page.get_text("dict")
+                    all_spans = [
+                        span
+                        for blk in page_dict.get("blocks", [])
+                        for line in blk.get("lines", [])
+                        for span in line.get("spans", [])
+                    ]
+                    font_sizes = [s["size"] for s in all_spans if s.get("size", 0) > 0]
+                except Exception:
+                    font_sizes = []
+
+                # 正文字号：取下中位数（排序后偏下中间值），使较小的正文字号成为基准
+                if font_sizes:
+                    sorted_sizes = sorted(font_sizes)
+                    mid = (len(sorted_sizes) - 1) // 2
+                    body_font_size = sorted_sizes[mid]
+                else:
+                    body_font_size = 0.0
+
+                # 构建 block 文本 → 最大字号的映射，供后续按 block 判断
+                block_max_size: dict[int, float] = {}
+                if font_sizes and all_spans:
+                    # 以 span 文本内容为 key 来关联，退而求其次：按顺序与 blocks 对应
+                    try:
+                        page_dict2 = page.get_text("dict")
+                        for blk_idx, blk in enumerate(page_dict2.get("blocks", [])):
+                            sizes_in_blk = [
+                                span["size"]
+                                for line in blk.get("lines", [])
+                                for span in line.get("spans", [])
+                                if span.get("size", 0) > 0
+                            ]
+                            block_max_size[blk_idx] = max(sizes_in_blk) if sizes_in_blk else 0.0
+                    except Exception:
+                        block_max_size = {}
+
                 blocks = page.get_text("blocks")
-                for block in blocks:
+                for blk_idx, block in enumerate(blocks):
                     # blocks 格式：(x0, y0, x1, y1, text, block_no, block_type)
                     # block_type == 1 表示图片 block，无有效文本，跳过
                     if len(block) < 7 or block[6] == 1:
@@ -167,10 +212,17 @@ class DocumentParser:
                     if not text or len(text) < _MIN_CONTENT_LENGTH:
                         continue
 
+                    # 根据字号比例判断类型（无字号信息时退化为 text）
+                    max_size = block_max_size.get(blk_idx, 0.0)
+                    if body_font_size > 0 and max_size > 0:
+                        item_type = _detect_block_type(max_size, body_font_size)
+                    else:
+                        item_type = "text"
+
                     content_items.append(ContentItem(
                         item_id=f"{doc_id}_item_{idx}",
                         doc_id=doc_id,
-                        type="text",
+                        type=item_type,
                         content=text,
                         page_idx=page_num,
                         bbox=tuple(block[:4]),
@@ -222,6 +274,9 @@ class DocumentParser:
                 captions = item_dict.get("captions", [])
                 content = str(captions[0]) if captions else ""
                 item_type = "image"
+            elif label_str in _HEADING_LABELS:
+                content = getattr(item, "text", "") or ""
+                item_type = "heading"
             else:
                 content = getattr(item, "text", "") or ""
                 item_type = "text"

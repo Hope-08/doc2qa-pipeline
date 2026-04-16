@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from models import SemanticChunk
 from qa_generation.multi_type_generator import QAGenerator
 from utils.llm_client import LLMCallResult

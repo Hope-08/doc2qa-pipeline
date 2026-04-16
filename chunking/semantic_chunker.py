@@ -6,7 +6,6 @@ import re
 
 import numpy as np
 
-from models import SemanticChunk
 from utils.logger import get_logger
 
 logger = get_logger(__name__)

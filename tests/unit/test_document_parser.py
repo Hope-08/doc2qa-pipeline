@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from parsing.document_parser import DocumentParser, _MIN_CONTENT_LENGTH
-
+from parsing.document_parser import DocumentParser
 
 # ---------------------------------------------------------------------------
 # 辅助：构造 fitz.open mock（PyMuPDF）
@@ -412,3 +411,84 @@ class TestDocumentParser:
 
         for item in result.content_list:
             assert "myfile" in item.item_id
+
+    def test_docling_maps_section_header_to_heading(self, tmp_path: Path) -> None:
+        """docling 的 section_header label 应映射为 heading 类型。"""
+        doc_file = tmp_path / "report.docx"
+        doc_file.write_bytes(b"PK fake docx")
+
+        # 构造包含 section_header label 的 docling 结果
+        items_def = [
+            {"label": "section_header", "text": "第一章：引言与背景", "page_no": 1},
+            {"label": "text", "text": "这是引言部分的正文内容，足够长的文字供测试使用。", "page_no": 1},
+        ]
+        docling_result = _make_docling_result(items_def)
+
+        # section_header label 需要以带 .value 属性的 mock 对象表示（模拟 DocItemLabel 枚举）
+        for (item, _), item_def in zip(docling_result.document.iterate_items(), items_def):
+            label_mock = MagicMock()
+            label_mock.value = item_def["label"]
+            item.label = label_mock
+
+        with patch("docling.document_converter.DocumentConverter") as MockConverter:
+            MockConverter.return_value.convert.return_value = docling_result
+            parser = DocumentParser(backend="docling")
+            result = parser.parse(str(doc_file))
+
+        heading_items = [item for item in result.content_list if item.type == "heading"]
+        assert len(heading_items) >= 1, "应至少有一个 heading 类型的 ContentItem"
+        assert heading_items[0].content == "第一章：引言与背景"
+
+    def test_pymupdf_marks_large_font_block_as_heading(self, tmp_path: Path) -> None:
+        """PyMuPDF 较大字号的 block 应映射为 heading 类型。"""
+        doc_file = tmp_path / "doc.pdf"
+        doc_file.write_bytes(b"%PDF")
+
+        heading_text = "第一节：系统架构设计"
+        body_text = "这是正文段落，字号正常，内容足够长用于验证分类逻辑。" * 2
+
+        # block 格式：(x0, y0, x1, y1, text, block_no, block_type)
+        blocks = [
+            (0, 0, 200, 30, heading_text, 0, 0),
+            (0, 40, 200, 80, body_text, 1, 0),
+        ]
+
+        # get_text("dict") 返回包含字号信息的结构，用于区分标题和正文
+        # heading block 字号 24，body block 字号 12（比例 >= 1.2 应被判定为 heading）
+        dict_result = {
+            "blocks": [
+                {
+                    "lines": [{"spans": [{"size": 24.0, "text": heading_text}]}]
+                },
+                {
+                    "lines": [{"spans": [{"size": 12.0, "text": body_text}]}]
+                },
+            ]
+        }
+
+        fitz_doc = MagicMock()
+        fitz_doc.__len__ = MagicMock(return_value=1)
+        page = MagicMock()
+
+        def get_text_side_effect(mode=""):
+            if mode == "blocks":
+                return blocks
+            if mode == "dict":
+                return dict_result
+            # mode == "" 返回纯文本（用于 _is_digital_pdf 检测）
+            return heading_text + " " + body_text
+
+        page.get_text = MagicMock(side_effect=get_text_side_effect)
+        fitz_doc.__iter__ = MagicMock(return_value=iter([page]))
+        fitz_doc.__enter__ = MagicMock(return_value=fitz_doc)
+        fitz_doc.__exit__ = MagicMock(return_value=False)
+
+        with patch("fitz.open", return_value=fitz_doc):
+            parser = DocumentParser(backend="pymupdf")
+            result = parser.parse(str(doc_file))
+
+        heading_items = [item for item in result.content_list if item.type == "heading"]
+        text_items = [item for item in result.content_list if item.type == "text"]
+        assert len(heading_items) >= 1, "较大字号的 block 应被标记为 heading"
+        assert heading_items[0].content == heading_text
+        assert len(text_items) >= 1, "正常字号的 block 应保留为 text"

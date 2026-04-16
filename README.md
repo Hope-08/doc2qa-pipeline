@@ -77,6 +77,8 @@ cp .env.example .env
 | `PARSING_BACKEND` | `auto` | 解析引擎：auto \| docling \| pymupdf \| unstructured |
 | `OCR_LANG` | `chi_sim+eng` | Tesseract 语言包 |
 | `LLM_MODEL` | `azure-openai/gpt-5.4` | LLM 模型名称，如 `gpt-4o`、`qwen2.5-72b-instruct` |
+| `QA_STRATEGY` | `simple` | QA 生成策略：`simple`（逐块）\| `advanced`（文档级多跳） |
+| `MAX_QA_PER_DOC` | `50` | Advanced 策略下单文档最多生成 QA 数 |
 
 > 无需配置外部 API 服务，文档解析完全在本机运行。
 
@@ -85,8 +87,11 @@ cp .env.example .env
 - ✅ 多格式文档解析（PDF/DOCX/图片）
 - ✅ 扫描PDF自动OCR（Tesseract，多语言）
 - ✅ 表格结构保留（HTML格式）
+- ✅ heading 边界感知分块（HeadlineSplitter，章节级别切分）
 - ✅ 语义感知分块（基于embedding，短文本自动预合并）
 - ✅ 多类型QA生成（definition/reasoning/comparison等）
+- ✅ Advanced QA生成（实体提取 + 跨块关系图 + 多跳推理问题）
+- ✅ 自一致性过滤（淘汰无需上下文即可回答的过简问题）
 - ✅ 低质量chunk自动过滤（过短、纯日期列表等）
 - ✅ NLI幻觉检测（faithfulness评分）
 - ✅ 断点续跑（Prefect编排）
@@ -167,7 +172,8 @@ docker run -v $(pwd)/docs:/app/docs \
 | 扫描OCR | ocrmypdf + Tesseract | 16.0.0+ |
 | 表格提取 | camelot-py + img2table | 0.11.0+ |
 | 语义分块 | langchain-openai Embeddings | - |
-| QA生成 | langchain-openai | 0.1.0+ |
+| QA生成（简单） | langchain-openai | 0.1.0+ |
+| QA生成（多跳） | 实体提取 + 关系图 + 合成（LLM） | - |
 | 质量评估 | LLM NLI + OpenAI Embeddings | - |
 | Pipeline编排 | Prefect | 3.0.0+ |
 | API服务 | FastAPI + uvicorn | 0.100.0+ |

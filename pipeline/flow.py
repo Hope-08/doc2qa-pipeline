@@ -12,12 +12,14 @@ from prefect import flow
 
 from config.settings import settings as _settings
 from pipeline.tasks import (
-    parse_task,
-    normalize_task,
     chunk_task,
-    generate_qa_task,
-    score_filter_task,
+    enrich_task,
     export_task,
+    generate_qa_task,
+    normalize_task,
+    parse_task,
+    score_filter_task,
+    synthesize_qa_task,
 )
 from utils.logger import get_logger
 
@@ -74,16 +76,16 @@ def doc2qa_flow(
         raise ValueError(f"job_id 超出输出目录范围：{_job_id!r}")
     job_dir.mkdir(parents=True, exist_ok=True)
 
-    output_path = output_path or str(
-        job_dir / f"qa_dataset.{_format_ext(export_format)}"
-    )
+    output_path = output_path or str(job_dir / f"qa_dataset.{_format_ext(export_format)}")
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
     logger.info("=" * 60)
     logger.info("doc2qa-pipeline 启动  job_id=%s", _job_id)
     logger.info(
         "文档数：%d  模型：%s  解析引擎：%s",
-        len(file_paths), model, cfg.parsing_backend,
+        len(file_paths),
+        model,
+        cfg.parsing_backend,
     )
     logger.info("中间结果目录：%s", job_dir)
     logger.info("=" * 60)
@@ -117,11 +119,33 @@ def doc2qa_flow(
             continue
 
         # 4. QA 生成
-        qa_list = generate_qa_task(
-            chunks,
-            model=model,
-            temperature=cfg.llm_temperature,
-        )
+        if cfg.qa_strategy == "advanced":
+            from qa_generation.doc_qa_synthesizer import calc_doc_quota
+
+            enriched = enrich_task(chunks, model=cfg.entity_extractor_model)
+            _save_step(job_dir, f"04_enriched_{doc_stem}.json", enriched)
+            if not enriched:
+                logger.warning(
+                    "文档 [%s] 实体提取结果为空，跳过 advanced QA 合成", Path(file_path).name
+                )
+                continue
+            total_chars = sum(len(c.get("content", "")) for c in enriched)
+            quota = calc_doc_quota(total_chars, cfg.max_qa_per_doc)
+            qa_list = synthesize_qa_task(
+                enriched,
+                quota=quota,
+                synthesize_model=cfg.synthesize_model,
+                verifier_model=cfg.nli_model,
+                embedding_model=cfg.embedding_model,
+                self_consistency_check=cfg.self_consistency_check,
+            )
+        else:
+            qa_list = generate_qa_task(
+                chunks,
+                model=model,
+                temperature=cfg.llm_temperature,
+                qa_strategy="simple",
+            )
         _save_step(job_dir, f"04_qa_raw_{doc_stem}.json", qa_list)
         all_qa_raw.extend(qa_list)
 
@@ -152,7 +176,8 @@ def doc2qa_flow(
     logger.info("Pipeline 完成！")
     logger.info(
         "总 QA 数：%d  通过质检：%d  通过率：%.1f%%",
-        len(all_qa_raw), len(passed_qa),
+        len(all_qa_raw),
+        len(passed_qa),
         len(passed_qa) / max(len(all_qa_raw), 1) * 100,
     )
     logger.info("中间结果目录：%s", job_dir)

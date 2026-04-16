@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from models import (
     ContentItem,
-    ParsedDocument,
+    EnrichedChunk,
     QAPair,
     QualityThresholds,
     SemanticChunk,
@@ -65,6 +67,72 @@ class TestSemanticChunk:
         assert chunk.content_type == "table"
 
 
+class TestEnrichedChunk:
+    def test_create_enriched_chunk_with_defaults(self) -> None:
+        chunk = EnrichedChunk(
+            chunk_id="doc1_chunk_0",
+            doc_id="doc1",
+            content_type="text",
+            content="深度学习是机器学习的一个分支。",
+            source_items=["doc1_item_0"],
+            page_idx=0,
+            token_count=16,
+        )
+        assert chunk.entities == []
+        assert chunk.summary is None
+        assert chunk.metadata == {}
+
+    def test_enriched_chunk_stores_enriched_values(self) -> None:
+        chunk = EnrichedChunk(
+            chunk_id="doc1_chunk_2",
+            doc_id="doc1",
+            content_type="text",
+            content="本节介绍检索增强生成的基本流程。",
+            source_items=["doc1_item_2", "doc1_item_3"],
+            page_idx=2,
+            token_count=24,
+            entities=["检索增强生成", "向量数据库"],
+            summary="概述检索增强生成流程与关键组件。",
+            metadata={"section": "2.1", "confidence": 0.93, "keywords": ["RAG", "embedding"]},
+        )
+
+        assert chunk.entities == ["检索增强生成", "向量数据库"]
+        assert chunk.summary == "概述检索增强生成流程与关键组件。"
+        assert chunk.metadata == {
+            "section": "2.1",
+            "confidence": 0.93,
+            "keywords": ["RAG", "embedding"],
+        }
+
+    def test_enriched_chunk_mutable_defaults_are_isolated(self) -> None:
+        chunk1 = EnrichedChunk(
+            chunk_id="doc1_chunk_3",
+            doc_id="doc1",
+            content_type="text",
+            content="第一段内容。",
+            source_items=["doc1_item_4"],
+            page_idx=3,
+            token_count=8,
+        )
+        chunk2 = EnrichedChunk(
+            chunk_id="doc1_chunk_4",
+            doc_id="doc1",
+            content_type="text",
+            content="第二段内容。",
+            source_items=["doc1_item_5"],
+            page_idx=4,
+            token_count=8,
+        )
+
+        chunk1.entities.append("RAG")
+        chunk1.metadata["keywords"] = ["embedding"]
+
+        assert chunk1.entities == ["RAG"]
+        assert chunk1.metadata == {"keywords": ["embedding"]}
+        assert chunk2.entities == []
+        assert chunk2.metadata == {}
+
+
 class TestQAPair:
     def test_default_scores_none(self) -> None:
         qa = QAPair(
@@ -100,7 +168,7 @@ class TestQAPair:
 class TestQualityThresholds:
     def test_frozen(self) -> None:
         thr = QualityThresholds()
-        with pytest.raises(Exception):  # FrozenInstanceError
+        with pytest.raises(FrozenInstanceError):
             thr.faithfulness_min = 0.9  # type: ignore[misc]
 
     def test_custom_values(self) -> None:

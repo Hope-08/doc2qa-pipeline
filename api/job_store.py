@@ -10,6 +10,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Literal
 
 JobStatus = Literal["pending", "running", "completed", "failed"]
@@ -22,9 +23,9 @@ class Job:
     job_id: str
     status: JobStatus = "pending"
     progress: str = ""
-    file_paths: list[str] = field(default_factory=list)   # 上传的临时文件路径
+    file_paths: list[str] = field(default_factory=list)  # 上传的临时文件路径
     file_count: int = 0
-    result: list[dict] = field(default_factory=list)      # 最终 QA 对列表
+    result: list[dict] = field(default_factory=list)  # 最终 QA 对列表
     error: str | None = None
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
@@ -45,8 +46,13 @@ class JobStore:
     # ------------------------------------------------------------------
 
     def create(self) -> Job:
-        """创建新任务，返回 Job 对象。"""
-        job = Job(job_id=str(uuid.uuid4()))
+        """创建新任务，返回 Job 对象。
+
+        job_id 格式：{YYYYMMDD_HHMMSS}_{4位随机十六进制}，便于按时间排序和肉眼识别。
+        """
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        suffix = uuid.uuid4().hex[:4]
+        job = Job(job_id=f"{ts}_{suffix}")
         with self._lock:
             self._jobs[job.job_id] = job
         return job

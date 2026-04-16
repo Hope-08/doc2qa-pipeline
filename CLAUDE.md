@@ -57,7 +57,11 @@ uv run python serve.py             # 生产模式
   → parse_task        → ParsedDocument           → 01_parsed_{doc}.json
   → normalize_task    → ParsedDocument (cleaned) → 02_normalized_{doc}.json
   → chunk_task        → list[SemanticChunk]       → 03_chunks_{doc}.json
-  → generate_qa_task  → list[QAPair]              → 04_qa_raw_{doc}.json
+  ┌─ simple 策略 ────────────────────────────────────────────────────────────
+  │ → generate_qa_task  → list[QAPair]            → 04_qa_raw_{doc}.json
+  └─ advanced 策略 ──────────────────────────────────────────────────────────
+    → enrich_task      → list[EnrichedChunk]      → 04_enriched_{doc}.json
+    → synthesize_qa_task → list[QAPair]           → 04_qa_raw_{doc}.json
   → score_filter_task → list[QAPair] (质检+去重)  → 05_qa_filtered.json
   → export_task       → JSONL / HF Dataset / Alpaca / RAGAS
                                                   → qa_dataset.{ext}
@@ -77,6 +81,7 @@ output/
     01_parsed_{doc}.json       # 解析原始结果（content_list + markdown）
     02_normalized_{doc}.json   # 清洗后（过滤噪声 ContentItem）
     03_chunks_{doc}.json       # 分块列表（内容、类型、page_idx）
+    04_enriched_{doc}.json     # Advanced 策略：实体富化后的 EnrichedChunk 列表
     04_qa_raw_{doc}.json       # 未过滤 QA（可对比过滤前后差异）
     04_qa_raw_all.json         # 多文档时的汇总（单文档时无此文件）
     05_qa_filtered.json        # 质检+去重后 QA（含所有评分字段）
@@ -85,8 +90,9 @@ output/
 
 排查步骤：
 1. `03_chunks` → 确认分块是否合理（数量、长度、类型分布）
-2. `04_qa_raw` → 确认 LLM 生成了什么（过滤前原始问答）
-3. `05_qa_filtered` → 查看 `is_passed=false` 的条目和 `fail_reasons`
+2. `04_enriched` → Advanced 策略下确认实体提取结果（entities、summary）
+3. `04_qa_raw` → 确认 LLM 生成了什么（过滤前原始问答）
+4. `05_qa_filtered` → 查看 `is_passed=false` 的条目和 `fail_reasons`
 
 ### 核心数据模型（`models.py`）
 
@@ -97,6 +103,7 @@ output/
 | `ContentItem` | 解析器输出的单个内容项（text / table / image / equation） |
 | `ParsedDocument` | 单个文档的解析结果，含 `content_list` 和 `markdown` |
 | `SemanticChunk` | 分块后的语义单元，`content_type` 为 text / table / image_caption |
+| `EnrichedChunk` | Advanced QA 用的富化分块，含 `entities`（关键实体列表）和 `summary` |
 | `QAPair` | 问答对，`quality_score` 等字段由 qa_filtering 填充 |
 | `QualityThresholds` | 质量过滤阈值，frozen dataclass |
 
@@ -113,6 +120,11 @@ output/
 | `llm_model` | `LLM_MODEL` | QA 生成模型，默认 `azure-openai/gpt-5.4`，可改为 `gpt-4o` |
 | `embedding_model` | `EMBEDDING_MODEL` | OpenAI embedding 模型，默认 `azure-openai/text-embedding-3-small` |
 | `nli_model` | `NLI_MODEL` | faithfulness 评分 LLM，默认 `azure-openai/gpt-5.4` |
+| `qa_strategy` | `QA_STRATEGY` | QA 生成策略：`simple`（逐块）\| `advanced`（文档级多跳） |
+| `max_qa_per_doc` | `MAX_QA_PER_DOC` | Advanced 策略下单文档最多生成 QA 数，默认 50 |
+| `self_consistency_check` | `SELF_CONSISTENCY_CHECK` | 自一致性过滤开关，默认 true |
+| `entity_extractor_model` | `ENTITY_EXTRACTOR_MODEL` | 实体提取 LLM，默认同 `nli_model` |
+| `synthesize_model` | `SYNTHESIZE_MODEL` | 多跳 QA 合成 LLM，默认同 `llm_model` |
 
 模块内通过 `from config.settings import settings` 获取全局单例（懒加载 `.env`）。
 
@@ -141,14 +153,15 @@ items = [ContentItem(**item) for item in parsed_dict["content_list"]]
 
 ### 分块策略（`chunking/`）
 
-- `TypeAwareChunker`（入口）：按 `ContentItem.type` 路由
-  - `text` → 相邻短 ContentItem（< 200 字符）先**预合并**成足够大的文本组，再交给 `SemanticChunker.chunk_texts_batch()`（OpenAI Embeddings 语义相似度切分）
-  - `table` / `image` → 整体保留，不切分
-  - `equation` → 跳过
+- `TypeAwareChunker`（入口）：按文档 heading 数量决定分块路径
+  - heading 数 ≥ `headline_min_count`（默认 3） → **HeadlineSplitter**：按 heading 边界分章节，章节过长时二次调用 `SemanticChunker`；超长章节切出的子 chunk 通过字符偏移精确分配 `source_items`
+  - heading 不足 → 旧逻辑：text → 短文本预合并 → SemanticChunker，table/image → 整体保留
 - 预合并阈值 `_MERGE_THRESHOLD = 200`：避免每个标题/行程条目单独成 chunk 导致碎片化
 - 语义切分 embedding API 按**批次**调用（单次请求），减少 API 调用次数
 
 ### QA 生成（`qa_generation/`）
+
+**Simple 策略**（默认，`QA_STRATEGY=simple`）：
 
 `QAGenerator.generate_batch()` 在调用 LLM 前先过滤低质量 chunk：
 
@@ -156,6 +169,22 @@ items = [ContentItem(**item) for item in parsed_dict["content_list"]]
 - **纯日期列表**（日期格式字符占比 > 60%）→ 跳过，无领域知识
 
 Prompt 模板（`config/prompts.py`）对 `text` 类型明确禁止：元文本分析题、同义反复题、不完整信息题、纯数据罗列题。若整段文本无领域知识，要求 LLM 返回 `[]`。
+
+**Advanced 策略**（`QA_STRATEGY=advanced`）：
+
+```
+SemanticChunk[]
+  → enrich_task（entity_extractor.py）
+      为每个 chunk 调用 LLM 提取关键实体 → list[EnrichedChunk]
+  → synthesize_qa_task（doc_qa_synthesizer.py）
+      1. doc_relation_index.py：按实体重叠 + embedding 相似度建跨块关系图
+      2. advanced_generator.py：基于相关 chunk 对生成多跳推理 QA
+      3. 按文档字符数分配 quota（max_qa_per_doc 上限）
+      4. 自一致性验证（self_consistency_check）：问题能被 LLM 直接回答 → 丢弃
+  → list[QAPair]（含 cross-chunk 多跳问题）
+```
+
+`pipeline/flow.py` 按 `cfg.qa_strategy` 路由；若 `enrich_task` 返回空列表则跳过该文档并写警告日志。
 
 ### 质量过滤（`qa_filtering/`）
 
@@ -174,6 +203,11 @@ Prompt 模板（`config/prompts.py`）对 `text` 类型明确禁止：元文本�
   - `patch("docling.document_converter.DocumentConverter")` → 模拟 docling 结果
   - `patch("unstructured.partition.auto.partition")` → 模拟 unstructured 结果
 - **LLM 相关测试**：Mock `langchain_openai.ChatOpenAI` 和 `langchain_openai.OpenAIEmbeddings`
+- **Advanced QA 测试**：Mock 各子模块
+  - `patch("qa_generation.entity_extractor.EntityExtractor")` → 模拟实体提取
+  - `patch("qa_generation.doc_qa_synthesizer.calc_doc_quota")` → 注意：`flow.py` 懒导入，patch 路径为源模块
+  - `patch("qa_generation.multi_type_generator.QAGenerator")` → 模拟 simple 路径的生成器
+- **Flow 路由测试**：使用 `.fn()` 绕过 Prefect wrapper，见 `tests/unit/test_flow_routing.py`
 - **共享 Fixture**：见 `tests/conftest.py`
 
 ### 可选依赖组

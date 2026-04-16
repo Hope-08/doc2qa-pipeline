@@ -7,8 +7,8 @@ import re
 import uuid
 from typing import Optional
 
-from models import QAPair, SemanticChunk
 from config.prompts import PROMPT_BY_TYPE
+from models import QAPair, SemanticChunk
 from utils.llm_client import LLMClient
 from utils.logger import get_logger
 

@@ -7,8 +7,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
-
+from typing import Optional, TypeAlias
 
 # ---------------------------------------------------------------------------
 # 文档解析层
@@ -62,6 +61,11 @@ class ParsedDocument:
 # ---------------------------------------------------------------------------
 
 
+JSONScalar: TypeAlias = str | int | float | bool | None
+JSONValue: TypeAlias = JSONScalar | list[JSONScalar]
+ChunkMetadata: TypeAlias = dict[str, JSONValue]
+
+
 @dataclass
 class SemanticChunk:
     """语义分块结果。
@@ -83,6 +87,38 @@ class SemanticChunk:
     source_items: list[str]
     page_idx: int
     token_count: int
+
+
+@dataclass
+class EnrichedChunk:
+    """高级 QA 生成使用的富化分块。
+
+    Attributes:
+        chunk_id:     唯一 ID，格式 {doc_id}_chunk_{idx}
+        doc_id:       所属文档 ID
+        content_type: 内容类型，取值 text | table | image_caption
+        content:      分块后的文本内容
+        source_items: 来源 ContentItem 的 ID 列表
+        page_idx:     所在页码
+        token_count:  估算 token 数
+        entities:     从 chunk 中抽取的关键实体名称列表；仅保存字符串，便于
+                      直接进入后续 prompt 或序列化结果
+        summary:      对 chunk 关键信息的简短摘要；无摘要时为 None
+        metadata:     面向高级 QA 生成的补充元数据，必须保持 JSON 可序列化；
+                      当前约定支持标量值以及标量列表，例如 section、confidence、
+                      keywords 等轻量字段
+    """
+
+    chunk_id: str
+    doc_id: str
+    content_type: str
+    content: str
+    source_items: list[str]
+    page_idx: int
+    token_count: int
+    entities: list[str] = field(default_factory=list)
+    summary: Optional[str] = None
+    metadata: ChunkMetadata = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------

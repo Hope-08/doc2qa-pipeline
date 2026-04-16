@@ -9,8 +9,9 @@
 
 from __future__ import annotations
 
-from models import ContentItem, ParsedDocument, SemanticChunk
+from chunking.headline_splitter import HeadlineSplitter
 from chunking.semantic_chunker import SemanticChunker
+from models import ContentItem, ParsedDocument, SemanticChunk
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -41,16 +42,40 @@ class TypeAwareChunker:
         embedding_model: str = "azure-openai/text-embedding-3-small",
         chunk_size: int = 512,
         similarity_threshold: float = 0.3,
+        headline_min_count: int = 2,
     ) -> None:
         self._semantic_chunker = SemanticChunker(
             embedding_model=embedding_model,
             chunk_size=chunk_size,
             similarity_threshold=similarity_threshold,
         )
+        self._headline_splitter = HeadlineSplitter(
+            embedding_model=embedding_model,
+            chunk_size=chunk_size,
+            similarity_threshold=similarity_threshold,
+        )
         self._chunk_size = chunk_size
+        self._headline_min_count = headline_min_count
 
     def chunk_document(self, parsed_doc: ParsedDocument) -> list[SemanticChunk]:
         """对整个文档的 content_list 进行类型感知分块。
+
+        当 heading 数量 >= headline_min_count 时，路由到 HeadlineSplitter；
+        否则走原有逻辑（_chunk_with_legacy_logic）。
+
+        Args:
+            parsed_doc: 文档解析结果。
+
+        Returns:
+            SemanticChunk 列表，可直接传入 QA 生成模块。
+        """
+        heading_count = sum(1 for item in parsed_doc.content_list if item.type == "heading")
+        if heading_count >= self._headline_min_count:
+            return self._headline_splitter.split(parsed_doc.doc_id, parsed_doc.content_list)
+        return self._chunk_with_legacy_logic(parsed_doc)
+
+    def _chunk_with_legacy_logic(self, parsed_doc: ParsedDocument) -> list[SemanticChunk]:
+        """原有类型感知分块逻辑。
 
         text 类型的相邻短 ContentItem 先合并成足够大的文本组，
         再批量发起一次 embedding API 调用，避免碎片 chunk 和过多 API 请求。
@@ -144,7 +169,8 @@ class TypeAwareChunker:
         for item in items:
             is_text = item.type not in _SKIP_TYPES and item.type not in _PRESERVE_TYPES
             if groups and groups[-1][0] == is_text:
-                groups[-1][1].append(item)
+                prev_is_text, prev_items = groups[-1]
+                groups[-1] = (prev_is_text, [*prev_items, item])
             else:
                 groups.append((is_text, [item]))
         return groups

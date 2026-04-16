@@ -6,7 +6,6 @@ import dataclasses
 from unittest.mock import MagicMock, patch
 
 import numpy as np
-import pytest
 
 from models import QAPair
 from qa_filtering.deduplicator import Deduplicator
