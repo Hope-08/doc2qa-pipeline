@@ -205,3 +205,83 @@ def test_simple_strategy_calls_generate_not_enrich(tmp_path) -> None:
     mock_enrich.assert_not_called()
     mock_synthesize.assert_not_called()
     assert isinstance(result, list)
+
+
+# ---------------------------------------------------------------------------
+# 测试 3：advanced 路径的 embedding_vectors 传入
+# ---------------------------------------------------------------------------
+
+
+def test_synthesize_qa_task_passes_embedding_vectors_to_relation_index(monkeypatch) -> None:
+    """synthesize_qa_task 在 advanced 路径中应构建 embedding_vectors 并传入
+    build_relation_index，而不是传空 dict {}。
+    """
+    from models import QAPair
+    from pipeline.tasks import synthesize_qa_task
+
+    # 构造两个 enriched chunk
+    def _make_enriched(chunk_id: str) -> dict:
+        return {
+            "chunk_id": chunk_id,
+            "doc_id": "doc",
+            "content_type": "text",
+            "content": "内容" * 200,
+            "source_items": ["item_0"],
+            "page_idx": 0,
+            "token_count": 400,
+            "entities": ["实体A"],
+            "summary": None,
+            "metadata": {},
+        }
+
+    enriched_dicts = [_make_enriched("c0"), _make_enriched("c1")]
+    qa = QAPair(
+        qa_id="qa_0",
+        chunk_id="c0",
+        doc_id="doc",
+        question="问题",
+        answer="答案",
+        context="上下文",
+        question_type="multi_hop",
+        content_type="text",
+    )
+
+    captured_call = {}
+
+    def _fake_build_relation_index(chunks, embedding_vectors, **kwargs):
+        captured_call["embedding_vectors"] = embedding_vectors
+        return []
+
+    class _FakeSynthesizer:
+        def synthesize(self, chunks, relations, quota):
+            return [qa]
+
+    monkeypatch.setattr("pipeline.tasks.build_relation_index", _fake_build_relation_index)
+    monkeypatch.setattr(
+        "pipeline.tasks.DocumentQASynthesizer",
+        lambda **kwargs: _FakeSynthesizer(),
+    )
+
+    # 模拟 embedding 客户端（synthesize_qa_task 内部调用）
+    mock_embedder = MagicMock()
+    mock_embedder.embed_documents.return_value = [[0.1, 0.2], [0.3, 0.4]]
+    monkeypatch.setattr(
+        "pipeline.tasks._get_embedder_for_task",
+        lambda model: mock_embedder,
+    )
+
+    synthesize_qa_task.fn(
+        enriched_chunks=enriched_dicts,
+        quota=5,
+        synthesize_model="azure-openai/gpt-5.4",
+        verifier_model="azure-openai/gpt-4o",
+        embedding_model="azure-openai/text-embedding-3-small",
+        self_consistency_check=False,
+    )
+
+    # embedding_vectors 应为非空字典，key 为 chunk_id
+    assert "embedding_vectors" in captured_call
+    assert isinstance(captured_call["embedding_vectors"], dict)
+    assert len(captured_call["embedding_vectors"]) == 2
+    assert "c0" in captured_call["embedding_vectors"]
+    assert "c1" in captured_call["embedding_vectors"]

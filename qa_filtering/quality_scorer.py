@@ -9,12 +9,13 @@ import numpy as np
 from models import QAPair, QualityThresholds
 from qa_filtering.hallucination_detector import _run_faithfulness_batch
 from utils.logger import get_logger
+from utils.text_filters import META_TEXT_RE as _META_TEXT_RE
 
 logger = get_logger(__name__)
 
 # 评分权重
 _WEIGHTS = {"faithfulness": 0.50, "relevance": 0.30, "completeness": 0.20}
-# faithfulness 评分每批条目数（与 hallucination_detector 保持一致，不直接导入私有常量）
+# faithfulness 评分每批条目数
 _FAITHFULNESS_BATCH_SIZE = 5
 
 
@@ -91,6 +92,10 @@ class QualityScorer:
                 fail_reasons.append(f"答案过短 {len(qa.answer)} 字符")
             if composite < thr.composite_pass:
                 fail_reasons.append(f"综合分不足 {composite:.2f}")
+
+            # ── 规则层惩罚 ──────────────────────────────────────────────
+            rule_reasons = _apply_rule_penalties(qa)
+            fail_reasons.extend(rule_reasons)
 
             is_passed = len(fail_reasons) == 0
             if is_passed:
@@ -192,3 +197,30 @@ class QualityScorer:
             logger.info("初始化 OpenAI embedding 模型：%s", self.embedding_model)
             self._embedder = OpenAIEmbeddings(model=self.embedding_model)
         return self._embedder
+
+
+# ---------------------------------------------------------------------------
+# 规则层惩罚（模块级）
+# ---------------------------------------------------------------------------
+
+
+def _apply_rule_penalties(qa: QAPair) -> list[str]:
+    """对 QA 执行轻量规则检测，返回 fail_reasons 追加列表。
+
+    检测项：
+    1. 元文本问题：问题或答案含元文本指代词
+    2. 伪多跳题：question_type 为 multi_hop 但 source_chunks 只有一个
+    """
+    reasons: list[str] = []
+
+    # 元文本检测
+    if _META_TEXT_RE.search(qa.question) or _META_TEXT_RE.search(qa.answer):
+        reasons.append("元文本指代（问题或答案含'文中'/'根据材料'等指代词）")
+
+    # 伪多跳检测
+    if qa.question_type == "multi_hop":
+        source_chunks = qa.metadata.get("source_chunks", []) if qa.metadata else []
+        if len(source_chunks) < 2:
+            reasons.append(f"伪多跳题：multi_hop 但 source_chunks 数量={len(source_chunks)}")
+
+    return reasons

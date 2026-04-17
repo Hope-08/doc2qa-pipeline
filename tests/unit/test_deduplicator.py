@@ -11,14 +11,14 @@ from models import QAPair
 from qa_filtering.deduplicator import Deduplicator
 
 
-def _make_qa(question: str, qa_id: str = "qa_0", quality_score: float = 0.8) -> QAPair:
+def _make_qa(question: str, answer: str = "答案内容。", qa_id: str = "qa_0", quality_score: float = 0.8) -> QAPair:
     return dataclasses.replace(
         QAPair(
             qa_id=qa_id,
             chunk_id="chunk_0",
             doc_id="doc1",
             question=question,
-            answer="答案内容。",
+            answer=answer,
             context="上下文内容。",
             question_type="definition",
             content_type="text",
@@ -137,3 +137,42 @@ class TestDeduplicator:
         dedup_dedup._embedder = _make_embedder_with_vectors([[1.0, 0.0], [1.0, 0.0]])
         result_dedup = dedup_dedup.deduplicate([qa1, qa2])
         assert len(result_dedup) == 1
+
+
+# ---------------------------------------------------------------------------
+# question + answer 联合去重（新增）
+# ---------------------------------------------------------------------------
+
+
+class TestQuestionAnswerDedup:
+    """测试基于 question + answer 联合文本的去重行为。"""
+
+    def _make_embedder_with_vectors(self, vectors):
+        embedder = MagicMock()
+        embedder.embed_documents.return_value = vectors
+        return embedder
+
+    def test_same_question_different_answer_kept(self):
+        """相同问题但答案不同时，联合文本相似度低，应都保留。"""
+        qa1 = _make_qa("深度学习有哪些优势？", answer="深度学习能自动提取特征，减少人工工程。", qa_id="qa_1")
+        qa2 = _make_qa("深度学习有哪些优势？", answer="深度学习在大数据场景下比传统方法准确率更高。", qa_id="qa_2")
+
+        # 模拟：联合文本 Q+A 的向量差异较大（正交）
+        vectors = [[1.0, 0.0], [0.0, 1.0]]
+        dedup = Deduplicator(similarity_threshold=0.9)
+        dedup._embedder = self._make_embedder_with_vectors(vectors)
+
+        result = dedup.deduplicate([qa1, qa2])
+        assert len(result) == 2
+
+    def test_same_question_same_answer_deduped(self):
+        """相同问题相同答案（联合文本完全一致），应只保留一个。"""
+        qa1 = _make_qa("深度学习是什么？", answer="深度学习是机器学习的一个分支。", qa_id="qa_1")
+        qa2 = _make_qa("深度学习是什么？", answer="深度学习是机器学习的一个分支。", qa_id="qa_2")
+
+        vectors = [[1.0, 0.0], [1.0, 0.0]]  # 相同向量
+        dedup = Deduplicator(similarity_threshold=0.9)
+        dedup._embedder = self._make_embedder_with_vectors(vectors)
+
+        result = dedup.deduplicate([qa1, qa2])
+        assert len(result) == 1

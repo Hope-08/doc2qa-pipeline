@@ -16,6 +16,10 @@ from typing import Any
 from prefect import task
 from prefect.tasks import task_input_hash
 
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
+
 # ---------------------------------------------------------------------------
 # 延迟导入（monkeypatch 需要在模块命名空间可见）
 # ---------------------------------------------------------------------------
@@ -281,6 +285,12 @@ def enrich_task(chunks: list[dict], model: str) -> list[dict]:
     return [_serialize(e) for e in enriched]
 
 
+def _get_embedder_for_task(embedding_model: str):
+    """延迟创建 embedding 客户端（便于测试 monkeypatch 替换）。"""
+    from langchain_openai import OpenAIEmbeddings
+    return OpenAIEmbeddings(model=embedding_model)
+
+
 @task(
     name="synthesize-qa",
     description="文档级 QA 合成：构建关系索引并调用合成器",
@@ -299,8 +309,22 @@ def synthesize_qa_task(
 ) -> list[dict]:
     """文档级 QA 合成 Task（LLM 失败自动重试 2 次）。"""
     chunks = [_deserialize_enriched_chunk(chunk) for chunk in enriched_chunks]
-    # embedding_vectors 传空 dict：当前版本仅启用实体重叠边，语义相似边暂不计算。
-    relations = build_relation_index(chunks=chunks, embedding_vectors={})
+
+    # 构建真实 embedding 向量以启用语义相似边
+    embedding_vectors: dict[str, list[float]] = {}
+    try:
+        embedder = _get_embedder_for_task(embedding_model)
+        chunk_ids = [c.chunk_id for c in chunks]
+        texts = [c.content for c in chunks]
+        vectors = embedder.embed_documents(texts)
+        embedding_vectors = dict(zip(chunk_ids, vectors))
+    except Exception as exc:
+        # embedding 不可用时退化为仅实体重叠边，不中断流程
+        logger.warning(
+            "synthesize_qa_task: embedding 构建失败，降级为仅实体重叠边：%s", exc
+        )
+
+    relations = build_relation_index(chunks=chunks, embedding_vectors=embedding_vectors)
     synthesizer = DocumentQASynthesizer(
         synthesize_model=synthesize_model,
         verifier_model=verifier_model,

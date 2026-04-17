@@ -136,3 +136,126 @@ def test_synthesize_skips_self_consistency_for_short_doc(monkeypatch) -> None:
 
     result = synthesizer.synthesize(chunks=chunks, relations=[], quota=3)
     assert result == [qa]  # 短文档跳过过滤
+
+
+# ─── _parse_qa_pairs 严格校验 ───────────────────────────────────────────────
+
+
+def test_parse_qa_pairs_invalid_json_returns_empty(monkeypatch) -> None:
+    """JSON 无效时返回空列表。"""
+    synthesizer = _make_synthesizer(monkeypatch)
+    chunks = [_make_enriched_chunk("c0", content="内容" * 50)]
+    result = synthesizer._parse_qa_pairs("not-json", chunks)
+    assert result == []
+
+
+def test_parse_qa_pairs_invalid_source_chunks_discarded(monkeypatch) -> None:
+    """source_chunks 中含不存在 chunk_id 的条目应被丢弃。"""
+    synthesizer = _make_synthesizer(monkeypatch)
+    chunks = [
+        _make_enriched_chunk("c0", content="内容" * 50),
+        _make_enriched_chunk("c1", content="内容" * 50),
+    ]
+    raw = '[{"question": "问题", "answer": "答案", "question_type": "multi_hop", "source_chunks": ["nonexistent_id"], "key_entities": ["实体"]}]'
+    result = synthesizer._parse_qa_pairs(raw, chunks)
+    assert result == []
+
+
+def test_parse_qa_pairs_invalid_question_type_discarded(monkeypatch) -> None:
+    """question_type 不在允许集合内的条目应被丢弃。"""
+    synthesizer = _make_synthesizer(monkeypatch)
+    chunks = [
+        _make_enriched_chunk("c0", content="内容" * 50),
+    ]
+    raw = '[{"question": "问题", "answer": "答案", "question_type": "invalid_xyz", "source_chunks": ["c0"], "key_entities": ["实体"]}]'
+    result = synthesizer._parse_qa_pairs(raw, chunks)
+    assert result == []
+
+
+def test_parse_qa_pairs_multi_hop_requires_two_source_chunks(monkeypatch) -> None:
+    """multi_hop 题必须关联 >= 2 个 source_chunks，否则丢弃。"""
+    synthesizer = _make_synthesizer(monkeypatch)
+    chunks = [
+        _make_enriched_chunk("c0", content="内容" * 50),
+        _make_enriched_chunk("c1", content="内容" * 50),
+    ]
+    raw = '[{"question": "问题", "answer": "答案", "question_type": "multi_hop", "source_chunks": ["c0"], "key_entities": ["实体"]}]'
+    result = synthesizer._parse_qa_pairs(raw, chunks)
+    assert result == []
+
+
+def test_parse_qa_pairs_multi_hop_with_two_chunks_kept(monkeypatch) -> None:
+    """multi_hop 题关联 2 个合法 source_chunks 时保留。"""
+    synthesizer = _make_synthesizer(monkeypatch)
+    chunks = [
+        _make_enriched_chunk("c0", content="内容" * 50),
+        _make_enriched_chunk("c1", content="内容" * 50),
+    ]
+    raw = '[{"question": "问题", "answer": "答案", "question_type": "multi_hop", "source_chunks": ["c0", "c1"], "key_entities": ["实体"]}]'
+    result = synthesizer._parse_qa_pairs(raw, chunks)
+    assert len(result) == 1
+    assert result[0].question_type == "multi_hop"
+    assert "c0" in result[0].metadata.get("source_chunks", [])
+    assert "c1" in result[0].metadata.get("source_chunks", [])
+
+
+def test_parse_qa_pairs_key_entities_must_be_list(monkeypatch) -> None:
+    """key_entities 非 list 时，该字段应被规范化为空列表（条目保留）。"""
+    synthesizer = _make_synthesizer(monkeypatch)
+    chunks = [
+        _make_enriched_chunk("c0", content="内容" * 50),
+    ]
+    raw = '[{"question": "问题", "answer": "答案", "question_type": "single_chunk", "source_chunks": ["c0"], "key_entities": "实体A"}]'
+    result = synthesizer._parse_qa_pairs(raw, chunks)
+    # 条目可保留，但 key_entities 应为 list
+    if result:
+        assert isinstance(result[0].metadata.get("key_entities", []), list)
+
+
+def test_parse_qa_pairs_context_uses_source_chunks_content(monkeypatch) -> None:
+    """context 应优先使用 source_chunks 对应的 chunk 内容，而非 fallback。"""
+    synthesizer = _make_synthesizer(monkeypatch)
+    chunks = [
+        _make_enriched_chunk("c0", content="A" * 100),
+        _make_enriched_chunk("c1", content="B" * 100),
+    ]
+    raw = '[{"question": "问题", "answer": "答案", "question_type": "contrast", "source_chunks": ["c0", "c1"], "key_entities": ["实体"]}]'
+    result = synthesizer._parse_qa_pairs(raw, chunks)
+    assert len(result) == 1
+    assert "A" in result[0].context
+    assert "B" in result[0].context
+
+
+# ─── _is_too_easy 保守判定 ──────────────────────────────────────────────────
+
+
+def test_is_too_easy_returns_false_when_verifier_vague(monkeypatch) -> None:
+    """verifier 给出模糊、泛化回答时不应判定为 easy（保守保留）。"""
+    synthesizer = _make_synthesizer(monkeypatch)
+    synthesizer._verify_llm.invoke.return_value = MagicMock(
+        content="这个问题比较复杂，可能需要具体背景信息。"
+    )
+    qa = _make_qa_pair("新疆的天山山脉有多长？", "天山山脉在新疆段约1700公里。")
+    result = synthesizer._is_too_easy(qa)
+    # 泛回答 → 保守保留，不应判定为 easy
+    assert result is False
+
+
+def test_is_too_easy_returns_true_when_verifier_gives_specific_confident_answer(monkeypatch) -> None:
+    """verifier 给出高置信具体答案时判定为常识题，应过滤。"""
+    synthesizer = _make_synthesizer(monkeypatch)
+    synthesizer._verify_llm.invoke.return_value = MagicMock(
+        content="中国的首都是北京。"
+    )
+    qa = _make_qa_pair("中国的首都是哪里？", "北京。")
+    result = synthesizer._is_too_easy(qa)
+    assert result is True
+
+
+def test_is_too_easy_returns_false_on_dont_know(monkeypatch) -> None:
+    """verifier 回答'不知道'时保留 QA。"""
+    synthesizer = _make_synthesizer(monkeypatch)
+    synthesizer._verify_llm.invoke.return_value = MagicMock(content="不知道")
+    qa = _make_qa_pair("该文档中提到的第三条路线是什么？", "内容详见原文。")
+    result = synthesizer._is_too_easy(qa)
+    assert result is False

@@ -66,6 +66,63 @@ def test_extract_entities_returns_empty_list_on_missing_key() -> None:
     assert enriched.entities == []
 
 
+# ─── 实体清洗 ─────────────────────────────────────────────────────────────────
+
+
+def test_parse_entities_deduplicates() -> None:
+    """_parse_entities 应对重复实体去重，保持首次出现顺序。"""
+    from qa_generation.entity_extractor import EntityExtractor
+
+    raw = '{"entities": ["乌鲁木齐", "喀纳斯", "乌鲁木齐", "天山"]}'
+    result = EntityExtractor._parse_entities(raw)
+    assert result == ["乌鲁木齐", "喀纳斯", "天山"]
+
+
+def test_parse_entities_filters_too_short() -> None:
+    """过短的实体（1~2字符且非专有名词特征）应被过滤。"""
+    from qa_generation.entity_extractor import EntityExtractor
+
+    raw = '{"entities": ["X", "Y", "乌鲁木齐", "A"]}'
+    result = EntityExtractor._parse_entities(raw)
+    # 单字符英文字母被过滤，中文专有名词保留
+    assert "乌鲁木齐" in result
+    assert "X" not in result
+
+
+def test_parse_entities_filters_pure_numbers() -> None:
+    """纯数字实体应被过滤。"""
+    from qa_generation.entity_extractor import EntityExtractor
+
+    raw = '{"entities": ["2024", "天山", "100", "喀纳斯"]}'
+    result = EntityExtractor._parse_entities(raw)
+    assert "2024" not in result
+    assert "100" not in result
+    assert "天山" in result
+
+
+def test_parse_entities_filters_generic_terms() -> None:
+    """泛词（如'文本'、'内容'、'信息'等）应被过滤。"""
+    from qa_generation.entity_extractor import EntityExtractor
+
+    raw = '{"entities": ["文本", "内容", "天山", "信息", "乌鲁木齐"]}'
+    result = EntityExtractor._parse_entities(raw)
+    assert "文本" not in result
+    assert "内容" not in result
+    assert "信息" not in result
+    assert "天山" in result
+    assert "乌鲁木齐" in result
+
+
+def test_parse_entities_filters_punctuation_only() -> None:
+    """纯标点/符号条目应被过滤。"""
+    from qa_generation.entity_extractor import EntityExtractor
+
+    raw = '{"entities": ["...", "——", "天山", "、"]}'
+    result = EntityExtractor._parse_entities(raw)
+    assert "天山" in result
+    assert "..." not in result
+
+
 # ─── Task 8: enrich_task & synthesize_qa_task ──────────────────────────────
 
 

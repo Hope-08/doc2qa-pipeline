@@ -33,6 +33,9 @@ class Deduplicator:
     def deduplicate(self, qa_pairs: list[QAPair]) -> list[QAPair]:
         """去重，返回新列表（不修改原列表）。
 
+        使用 question + answer 联合文本做 embedding，相比单独对 question 去重
+        能区分"相同问题不同答案"（信息互补，应保留）与"相同问题相同答案"（真正重复）。
+
         Args:
             qa_pairs: 输入 QA 对，按 quality_score 降序排列效果更好。
 
@@ -48,15 +51,16 @@ class Deduplicator:
             logger.warning("embedding 模型不可用，跳过去重")
             return list(qa_pairs)
 
-        questions = [qa.question for qa in qa_pairs]
-        embs = np.array(embedder.embed_documents(questions))
+        # 联合 question + answer 文本以区分"相同问题不同答案"
+        combined_texts = [f"{qa.question} {qa.answer}" for qa in qa_pairs]
+        embs = np.array(embedder.embed_documents(combined_texts))
         norms = np.linalg.norm(embs, axis=1, keepdims=True) + 1e-8
         embs = embs / norms  # 归一化，点积即余弦相似度
 
-        # 预计算全矩阵相似度（numpy 向量化，远快于 Python 逐对循环）
+        # 预计算全矩阵相似度
         sim_matrix = embs @ embs.T  # shape: (n, n)
 
-        # 贪心去重：按顺序遍历，若与已保留的任意问题相似度过高则丢弃
+        # 贪心去重：按顺序遍历，若与已保留的任意条目相似度过高则丢弃
         kept_indices: list[int] = []
         for i in range(len(qa_pairs)):
             if not kept_indices or float(np.max(sim_matrix[i, kept_indices])) < self.similarity_threshold:

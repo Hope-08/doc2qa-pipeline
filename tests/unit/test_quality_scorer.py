@@ -16,6 +16,8 @@ def _make_qa(
     answer: str = "深度学习是机器学习的一个分支，使用多层神经网络处理数据。",
     context: str = "深度学习是机器学习的一个分支，使用多层神经网络处理数据，在图像识别领域取得突破。",
     qa_id: str = "qa_0",
+    question_type: str = "definition",
+    metadata: dict | None = None,
 ) -> QAPair:
     return QAPair(
         qa_id=qa_id,
@@ -24,8 +26,9 @@ def _make_qa(
         question=question,
         answer=answer,
         context=context,
-        question_type="definition",
+        question_type=question_type,
         content_type="text",
+        metadata=metadata or {},
     )
 
 
@@ -221,3 +224,62 @@ class TestScoreBatch:
         scorer = QualityScorer()
         result = scorer.score_batch([])
         assert result == []
+
+
+# ---------------------------------------------------------------------------
+# 规则惩罚测试（新增）
+# ---------------------------------------------------------------------------
+
+
+class TestRulePenalties:
+    """测试 score_batch 中新增的规则层惩罚。"""
+
+    def _make_scorer_with_mocks(self, llm_scores, embed_vectors, thresholds=None):
+        scorer = QualityScorer(
+            nli_model="azure-openai/gpt-5.4",
+            embedding_model="azure-openai/text-embedding-3-small",
+            thresholds=thresholds,
+        )
+        scorer._llm = _make_mock_llm(llm_scores)
+        embedder = MagicMock()
+        embedder.embed_documents.return_value = embed_vectors
+        scorer._embedder = embedder
+        return scorer
+
+    def test_meta_text_question_penalized(self):
+        """含元文本指代词（'文中'/'根据材料'）的问题应被标记或降分。"""
+        qa = _make_qa(question="文中提到的深度学习有哪些特点？")
+        thresholds = QualityThresholds(composite_pass=0.1)  # 低阈值，确保只有规则惩罚能导致失败
+
+        with _langchain_patch():
+            scorer = self._make_scorer_with_mocks(
+                llm_scores=[{"id": 0, "score": 0.9}],
+                embed_vectors=[[1.0, 0.0], [1.0, 0.0]],
+                thresholds=thresholds,
+            )
+            result = scorer.score_batch([qa])
+
+        # 元文本问题应在 fail_reasons 中有标记，或 is_passed 为 False
+        assert result[0].is_passed is False or any(
+            "元文本" in r or "meta" in r.lower() for r in result[0].fail_reasons
+        )
+
+    def test_pseudo_multi_hop_penalized(self):
+        """名义 multi_hop 但 source_chunks 只有一个的 QA 应被降分。"""
+        qa = _make_qa(
+            question_type="multi_hop",
+            metadata={"source_chunks": ["c0"], "key_entities": []},  # 只有一个 source chunk
+        )
+        thresholds = QualityThresholds(composite_pass=0.1)
+
+        with _langchain_patch():
+            scorer = self._make_scorer_with_mocks(
+                llm_scores=[{"id": 0, "score": 0.9}],
+                embed_vectors=[[1.0, 0.0], [1.0, 0.0]],
+                thresholds=thresholds,
+            )
+            result = scorer.score_batch([qa])
+
+        assert result[0].is_passed is False or any(
+            "multi_hop" in r or "伪多跳" in r for r in result[0].fail_reasons
+        )
