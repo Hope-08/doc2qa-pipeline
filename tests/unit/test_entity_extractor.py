@@ -1,4 +1,5 @@
 """单元测试：EntityExtractor 实体提取器。"""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch

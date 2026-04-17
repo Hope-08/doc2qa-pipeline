@@ -54,8 +54,7 @@ class TableExtractor:
             import camelot
         except ImportError:
             logger.warning(
-                "camelot-py 未安装，跳过表格补充提取。"
-                "安装：uv add 'camelot-py[cv]>=0.11.0'"
+                "camelot-py 未安装，跳过表格补充提取。" "安装：uv add 'camelot-py[cv]>=0.11.0'"
             )
             return []
 

@@ -91,6 +91,7 @@ def doc2qa_flow(
     logger.info("=" * 60)
 
     all_qa_raw: list[dict] = []
+    doc_id_to_filename: dict[str, str] = {}  # 记录 doc_id → 原始文件名映射
 
     for file_path in file_paths:
         # 用路径 MD5 前缀保证同名文件的中间结果不互相覆盖
@@ -105,6 +106,11 @@ def doc2qa_flow(
             cfg.ocr_lang,
         )
         _save_step(job_dir, f"01_parsed_{doc_stem}.json", parsed)
+
+        # 记录 doc_id → 原始文件名映射（用于 Excel 导出）
+        doc_id = parsed.get("doc_id", "")
+        if doc_id:
+            doc_id_to_filename[doc_id] = Path(file_path).name
 
         # 2. 清洗
         cleaned = normalize_task(parsed)
@@ -170,7 +176,7 @@ def doc2qa_flow(
     _save_step(job_dir, "05_qa_filtered.json", passed_qa)
 
     # 6. 导出
-    final_path = export_task(passed_qa, output_path, export_format)
+    final_path = export_task(passed_qa, output_path, export_format, doc_id_to_filename)
 
     logger.info("=" * 60)
     logger.info("Pipeline 完成！")

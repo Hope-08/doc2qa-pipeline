@@ -288,6 +288,7 @@ def enrich_task(chunks: list[dict], model: str) -> list[dict]:
 def _get_embedder_for_task(embedding_model: str):
     """延迟创建 embedding 客户端（便于测试 monkeypatch 替换）。"""
     from langchain_openai import OpenAIEmbeddings
+
     return OpenAIEmbeddings(model=embedding_model)
 
 
@@ -320,9 +321,7 @@ def synthesize_qa_task(
         embedding_vectors = dict(zip(chunk_ids, vectors))
     except Exception as exc:
         # embedding 不可用时退化为仅实体重叠边，不中断流程
-        logger.warning(
-            "synthesize_qa_task: embedding 构建失败，降级为仅实体重叠边：%s", exc
-        )
+        logger.warning("synthesize_qa_task: embedding 构建失败，降级为仅实体重叠边：%s", exc)
 
     relations = build_relation_index(chunks=chunks, embedding_vectors=embedding_vectors)
     synthesizer = DocumentQASynthesizer(
@@ -340,10 +339,30 @@ def export_task(
     qa_dicts: list[dict],
     output_path: str,
     format_type: str,
+    doc_id_to_filename: dict[str, str] | None = None,
 ) -> str:
-    """数据集导出 Task。"""
-    from export.dataset_exporter import DatasetExporter
+    """数据集导出 Task。
+
+    Args:
+        qa_dicts: QA 对字典列表
+        output_path: 输出文件路径
+        format_type: 导出格式（jsonl / hf_dataset / alpaca / ragas / excel）
+        doc_id_to_filename: doc_id → 原始文件名映射（用于 Excel 导出）
+
+    Returns:
+        实际输出文件路径
+    """
     from models import QAPair
 
     qa_pairs = [QAPair(**qa) for qa in qa_dicts]
+
+    if format_type == "excel":
+        from export.excel_exporter import ExcelExporter
+
+        # 使用传入的映射，如果没有则回退到 doc_id
+        mapping = doc_id_to_filename if doc_id_to_filename is not None else {}
+        return ExcelExporter.export(qa_pairs, output_path, mapping)
+
+    from export.dataset_exporter import DatasetExporter
+
     return DatasetExporter.export(qa_pairs, output_path, format_type)  # type: ignore[arg-type]

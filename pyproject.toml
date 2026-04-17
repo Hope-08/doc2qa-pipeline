@@ -24,6 +24,7 @@ dependencies = [
     # 数据格式
     "datasets>=2.20.0",
     "pandas>=2.0.0",
+    "openpyxl>=3.1.0",
 
     # 工具库
     "python-dotenv>=1.0.0",

@@ -20,6 +20,7 @@ async def lifespan(app: FastAPI):
     logger.info("doc2qa-pipeline API 服务启动")
 
     from config.settings import settings
+
     logger.info("解析引擎: %s  OCR语言: %s", settings.parsing_backend, settings.ocr_lang)
     logger.info("LLM 模型: %s", settings.llm_model)
     logger.info("CORS 允许来源: %s", settings.cors_origins)
@@ -37,9 +38,10 @@ def create_app() -> FastAPI:
         description=(
             "企业知识库 QA 数据自动生成接口。\n\n"
             "**使用流程**：\n"
-            "1. `POST /api/v1/jobs` 上传文档，获得 `job_id`\n"
+            "1. `POST /api/v1/jobs` 上传文档（支持多文件），获得 `job_id`\n"
             "2. `GET /api/v1/jobs/{job_id}` 轮询任务状态，直到 `completed`\n"
-            "3. `GET /api/v1/jobs/{job_id}/result` 获取 QA 结果"
+            "3. `GET /api/v1/jobs/{job_id}/result` 获取 QA 结果（JSON）\n"
+            "4. `GET /api/v1/jobs/{job_id}/export/excel` 下载 Excel 文件"
         ),
         version="1.0.0",
         lifespan=lifespan,
@@ -49,6 +51,7 @@ def create_app() -> FastAPI:
 
     # CORS：来源由配置文件控制（CORS_ORIGINS 环境变量或 .env）
     from config.settings import settings as _settings
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_settings.cors_origins,
@@ -59,6 +62,7 @@ def create_app() -> FastAPI:
 
     # 注册路由
     from api.routers import health, jobs
+
     app.include_router(health.router)
     app.include_router(jobs.router)
 

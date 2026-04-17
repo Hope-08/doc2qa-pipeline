@@ -96,12 +96,12 @@ def test_split_sub_chunks_have_correct_source_items(monkeypatch) -> None:
     )
     chunks = splitter.split(doc_id="d", items=items)
     assert len(chunks) == 2
-    assert chunks[0].source_items == ["d_item_0"], (
-        f"第一子 chunk 应只引用 d_item_0，实际：{chunks[0].source_items}"
-    )
-    assert chunks[1].source_items == ["d_item_1"], (
-        f"第二子 chunk 应只引用 d_item_1，实际：{chunks[1].source_items}"
-    )
+    assert chunks[0].source_items == [
+        "d_item_0"
+    ], f"第一子 chunk 应只引用 d_item_0，实际：{chunks[0].source_items}"
+    assert chunks[1].source_items == [
+        "d_item_1"
+    ], f"第二子 chunk 应只引用 d_item_1，实际：{chunks[1].source_items}"
 
 
 def test_chunk_document_falls_back_to_legacy_when_headings_not_enough(monkeypatch) -> None:

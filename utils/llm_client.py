@@ -65,9 +65,7 @@ class LLMClient:
             from langchain_core.messages import HumanMessage
             from langchain_openai import ChatOpenAI
         except ImportError as exc:
-            raise ImportError(
-                "请安装 langchain-openai：uv add 'langchain-openai>=0.1.0'"
-            ) from exc
+            raise ImportError("请安装 langchain-openai：uv add 'langchain-openai>=0.1.0'") from exc
 
         if self._llm is None:
             self._llm = ChatOpenAI(

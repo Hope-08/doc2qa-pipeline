@@ -22,7 +22,9 @@ _MAX_DATE_RATIO = 0.6
 _DATE_PATTERN = re.compile(r"\d{4}[-/]\d{1,2}[-/]\d{1,2}")
 
 # 目录碎片检测：大量 "章/节/……数字" 行（用 [^\n] 限制单行匹配，避免回溯放大）
-_TOC_LINE_PATTERN = re.compile(r"(第[一二三四五六七八九十百\d]+[章节篇]|[一二三四五六七八九十\d]+[、.．])[^\n]{0,30}[…\.]{3,}\s*\d+")
+_TOC_LINE_PATTERN = re.compile(
+    r"(第[一二三四五六七八九十百\d]+[章节篇]|[一二三四五六七八九十\d]+[、.．])[^\n]{0,30}[…\.]{3,}\s*\d+"
+)
 _TOC_LINE_MIN = 3  # 超过此行数判定为目录
 
 # 联系方式碎片检测
@@ -33,7 +35,19 @@ _CONTACT_PATTERN = re.compile(
 _CONTACT_MIN_RATIO = 0.5  # 联系方式行占总行数比例超过此值 → 联系方式碎片
 
 # 允许的 question_type 值（与 PROMPT_BY_TYPE 生成内容保持一致）
-_ALLOWED_TYPES = frozenset({"definition", "reasoning", "procedure", "fact", "comparison", "summary", "description", "context", "unknown"})
+_ALLOWED_TYPES = frozenset(
+    {
+        "definition",
+        "reasoning",
+        "procedure",
+        "fact",
+        "comparison",
+        "summary",
+        "description",
+        "context",
+        "unknown",
+    }
+)
 
 # Q-A 重叠比率（question token 在 answer 中的占比超过此阈值 → 复述题）
 _QA_OVERLAP_THRESHOLD = 0.7
@@ -79,15 +93,15 @@ class QAGenerator:
             try:
                 qa_list = self._generate_for_chunk(chunk)
                 all_qa.extend(qa_list)
-                logger.debug(
-                    "chunk [%s] → %d 个 QA 对", chunk.chunk_id, len(qa_list)
-                )
+                logger.debug("chunk [%s] → %d 个 QA 对", chunk.chunk_id, len(qa_list))
             except Exception as exc:
                 logger.warning("chunk [%s] 生成失败，跳过：%s", chunk.chunk_id, exc)
 
         logger.info(
             "批量生成完成：%d chunks（跳过 %d 低质量）→ %d QA 对",
-            len(chunks), skipped, len(all_qa),
+            len(chunks),
+            skipped,
+            len(all_qa),
         )
         return all_qa
 
@@ -145,15 +159,11 @@ class QAGenerator:
                 continue
             # 元文本指代词过滤
             if _META_TEXT_PATTERNS.search(question) or _META_TEXT_PATTERNS.search(answer):
-                logger.debug(
-                    "chunk [%s] 过滤元文本问答：%s", chunk.chunk_id, question[:60]
-                )
+                logger.debug("chunk [%s] 过滤元文本问答：%s", chunk.chunk_id, question[:60])
                 continue
             # Q-A 高重叠复述题过滤
             if _is_qa_overlap(question, answer):
-                logger.debug(
-                    "chunk [%s] 过滤复述题：%s", chunk.chunk_id, question[:60]
-                )
+                logger.debug("chunk [%s] 过滤复述题：%s", chunk.chunk_id, question[:60])
                 continue
 
             qa_pairs.append(
@@ -166,6 +176,8 @@ class QAGenerator:
                     context=chunk.content,
                     question_type=qa.get("type", "unknown"),
                     content_type=chunk.content_type,
+                    reason=str(qa.get("reason", "")).strip(),
+                    reasoning_steps=str(qa.get("reasoning_steps", "")).strip(),
                     metadata={"page_idx": chunk.page_idx},
                 )
             )
@@ -203,6 +215,7 @@ class QAGenerator:
 # ------------------------------------------------------------------
 # 模块级工具函数
 # ------------------------------------------------------------------
+
 
 def _is_qa_overlap(question: str, answer: str) -> bool:
     """判断答案是否只是问题的复述（高 token 重叠率）。

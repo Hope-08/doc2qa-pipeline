@@ -59,8 +59,8 @@ def _run_faithfulness_batch(
     prompt = (
         '请判断以下每个条目中，"回答"是否完全基于"上下文"所支撑。\n'
         '返回 JSON 数组，每项格式为 {"id": <编号>, "score": <0~1 浮点数>}，'
-        '1 = 完全支撑，0 = 完全不支撑。只返回 JSON，不要其他内容。\n\n'
-        f'条目：\n{json.dumps(items, ensure_ascii=False, indent=2)}'
+        "1 = 完全支撑，0 = 完全不支撑。只返回 JSON，不要其他内容。\n\n"
+        f"条目：\n{json.dumps(items, ensure_ascii=False, indent=2)}"
     )
 
     try:
@@ -92,7 +92,9 @@ def _run_faithfulness_batch(
         expected_ids = {orig_j for orig_j, _ in needs_llm}
         missing = expected_ids - scores_map.keys()
         if missing:
-            logger.warning("LLM 返回缺少 %d 个条目（id=%s），使用默认值 0.5", len(missing), sorted(missing))
+            logger.warning(
+                "LLM 返回缺少 %d 个条目（id=%s），使用默认值 0.5", len(missing), sorted(missing)
+            )
 
         for orig_j, _ in needs_llm:
             preset.setdefault(orig_j, scores_map.get(orig_j, 0.5))
@@ -150,6 +152,7 @@ class HallucinationDetector:
     def _get_llm(self):
         if self._llm is None:
             from langchain_openai import ChatOpenAI
+
             logger.info("初始化幻觉检测 LLM：%s", self.model)
             self._llm = ChatOpenAI(model=self.model, temperature=0)
         return self._llm

@@ -44,7 +44,9 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # 语义分块
     # ------------------------------------------------------------------
-    chunk_size: int = Field(default=800, description="单个 chunk 的字符数上限（中文约 1 字 = 1~1.5 token）")
+    chunk_size: int = Field(
+        default=800, description="单个 chunk 的字符数上限（中文约 1 字 = 1~1.5 token）"
+    )
     similarity_threshold: float = Field(
         default=0.3,
         ge=0.0,

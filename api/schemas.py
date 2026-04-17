@@ -26,12 +26,16 @@ class JobCreatedResponse(BaseModel):
     file_count: int
     created_at: float = Field(default_factory=time.time)
 
-    model_config = {"json_schema_extra": {"example": {
-        "job_id": "550e8400-e29b-41d4-a716-446655440000",
-        "status": "pending",
-        "file_count": 1,
-        "created_at": 1744617600.0,
-    }}}
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "job_id": "550e8400-e29b-41d4-a716-446655440000",
+                "status": "pending",
+                "file_count": 1,
+                "created_at": 1744617600.0,
+            }
+        }
+    }
 
 
 class JobStatusResponse(BaseModel):
@@ -58,6 +62,8 @@ class QAPairResponse(BaseModel):
     faithfulness_score: float | None = None
     relevance_score: float | None = None
     is_passed: bool = True
+    reason: str = ""
+    reasoning_steps: str = ""
 
 
 class JobResultResponse(BaseModel):

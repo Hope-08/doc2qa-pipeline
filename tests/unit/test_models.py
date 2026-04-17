@@ -151,18 +151,43 @@ class TestQAPair:
 
     def test_fail_reasons_mutable_default(self) -> None:
         qa1 = QAPair(
-            qa_id="1", chunk_id="c1", doc_id="d1",
-            question="q", answer="a", context="ctx",
-            question_type="definition", content_type="text",
+            qa_id="1",
+            chunk_id="c1",
+            doc_id="d1",
+            question="q",
+            answer="a",
+            context="ctx",
+            question_type="definition",
+            content_type="text",
         )
         qa2 = QAPair(
-            qa_id="2", chunk_id="c2", doc_id="d1",
-            question="q2", answer="a2", context="ctx2",
-            question_type="reasoning", content_type="text",
+            qa_id="2",
+            chunk_id="c2",
+            doc_id="d1",
+            question="q2",
+            answer="a2",
+            context="ctx2",
+            question_type="reasoning",
+            content_type="text",
         )
         qa1.fail_reasons.append("test")
         # qa2 的 fail_reasons 不应受影响（dataclass field(default_factory=list)）
         assert qa2.fail_reasons == []
+
+    def test_qapair_new_fields_default(self) -> None:
+        """新字段有默认值，向下兼容旧代码。"""
+        qa = QAPair(
+            qa_id="qa_1",
+            chunk_id="chunk_1",
+            doc_id="doc_1",
+            question="问题",
+            answer="答案",
+            context="上下文",
+            question_type="definition",
+            content_type="text",
+        )
+        assert qa.reason == ""
+        assert qa.reasoning_steps == ""
 
 
 class TestQualityThresholds:

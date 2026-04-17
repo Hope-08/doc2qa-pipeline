@@ -46,9 +46,14 @@ TEXT_QA_PROMPT = """\
 
 输出格式（严格 JSON 数组，不要有任何解释或多余文字）：
 [
-  {{"question": "...", "answer": "...", "type": "definition"}},
-  {{"question": "...", "answer": "...", "type": "reasoning"}},
-  {{"question": "...", "answer": "...", "type": "procedure"}}
+  {{
+    "question": "...",
+    "answer": "...",
+    "type": "definition",
+    "reason": "出这道题的理由，说明该问题考察了哪个知识点或逻辑关系",
+    "reasoning_steps": "步骤1: ...\n步骤2: ...\n步骤3: 得出结论..."
+  }},
+  ...
 ]"""
 
 # ---------------------------------------------------------------------------
@@ -80,9 +85,14 @@ TABLE_QA_PROMPT = """\
 
 输出格式（严格 JSON 数组，不要有任何解释）：
 [
-  {{"question": "...", "answer": "...", "type": "fact"}},
-  {{"question": "...", "answer": "...", "type": "comparison"}},
-  {{"question": "...", "answer": "...", "type": "summary"}}
+  {{
+    "question": "...",
+    "answer": "...",
+    "type": "fact",
+    "reason": "出这道题的理由，说明该问题考察了哪个知识点或逻辑关系",
+    "reasoning_steps": "步骤1: ...\n步骤2: ...\n步骤3: 得出结论..."
+  }},
+  ...
 ]"""
 
 # ---------------------------------------------------------------------------
@@ -110,8 +120,14 @@ CAPTION_QA_PROMPT = """\
 
 输出格式（严格 JSON 数组，不要有任何解释）：
 [
-  {{"question": "...", "answer": "...", "type": "description"}},
-  {{"question": "...", "answer": "...", "type": "context"}}
+  {{
+    "question": "...",
+    "answer": "...",
+    "type": "description",
+    "reason": "出这道题的理由，说明该问题考察了哪个知识点或逻辑关系",
+    "reasoning_steps": "步骤1: ...\n步骤2: ...\n步骤3: 得出结论..."
+  }},
+  ...
 ]"""
 
 # ---------------------------------------------------------------------------
@@ -199,7 +215,9 @@ DOC_QA_SYNTHESIS_PROMPT = """\
     "answer": "（基于 source_chunks 内容的具体答案）",
     "question_type": "multi_hop|contrast|hypothetical|single_chunk",
     "source_chunks": ["chunk_id_1", "chunk_id_2"],
-    "key_entities": ["实体1", "实体2"]
+    "key_entities": ["实体1", "实体2"],
+    "reason": "出这道题的理由，说明考察了哪些知识点的关联",
+    "reasoning_steps": "步骤1: 从 chunk_1 获取...\n步骤2: 从 chunk_2 获取...\n步骤3: 综合得出结论..."
   }}
 ]
 """

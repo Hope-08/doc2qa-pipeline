@@ -63,18 +63,24 @@ class Deduplicator:
         # 贪心去重：按顺序遍历，若与已保留的任意条目相似度过高则丢弃
         kept_indices: list[int] = []
         for i in range(len(qa_pairs)):
-            if not kept_indices or float(np.max(sim_matrix[i, kept_indices])) < self.similarity_threshold:
+            if (
+                not kept_indices
+                or float(np.max(sim_matrix[i, kept_indices])) < self.similarity_threshold
+            ):
                 kept_indices.append(i)
 
         removed = len(qa_pairs) - len(kept_indices)
         if removed:
-            logger.info("去重：移除 %d 个重复 QA（共 %d → %d）", removed, len(qa_pairs), len(kept_indices))
+            logger.info(
+                "去重：移除 %d 个重复 QA（共 %d → %d）", removed, len(qa_pairs), len(kept_indices)
+            )
 
         return [qa_pairs[i] for i in kept_indices]
 
     def _get_embedder(self):
         if self._embedder is None:
             from langchain_openai import OpenAIEmbeddings
+
             logger.info("初始化 OpenAI embedding 模型：%s", self.embedding_model)
             self._embedder = OpenAIEmbeddings(model=self.embedding_model)
         return self._embedder

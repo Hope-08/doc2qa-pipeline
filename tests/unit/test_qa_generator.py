@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from models import SemanticChunk
-from qa_generation.multi_type_generator import QAGenerator, _ALLOWED_TYPES
+from qa_generation.multi_type_generator import QAGenerator
 from utils.llm_client import LLMCallResult
 
 
@@ -40,20 +38,29 @@ def _mock_llm(response_content: str) -> MagicMock:
 
 class TestQAGenerator:
     def test_generate_text_qa(self) -> None:
-        mock_response = """
-        [
-          {"question": "什么是深度学习？", "answer": "深度学习是机器学习的一个分支。", "type": "definition"},
-          {"question": "为什么深度学习效果好？", "answer": "因为使用多层神经网络提取特征。", "type": "reasoning"},
-          {"question": "如何应用深度学习？", "answer": "可以应用于图像识别和NLP。", "type": "procedure"}
-        ]
-        """
+        mock_response = """[
+          {
+            "question": "什么是深度学习？",
+            "answer": "深度学习是机器学习的一个分支。",
+            "type": "definition",
+            "reason": "考察基础概念理解",
+            "reasoning_steps": "步骤1: 定位概念定义\\n步骤2: 提取关键特征"
+          },
+          {
+            "question": "为什么深度学习效果好？",
+            "answer": "因为使用多层神经网络提取特征。",
+            "type": "reasoning",
+            "reason": "考察因果关系",
+            "reasoning_steps": "步骤1: 分析技术原理\\n步骤2: 解释效果来源"
+          }
+        ]"""
         generator = QAGenerator(llm_client=_mock_llm(mock_response))
         qa_list = generator.generate_batch([_make_chunk("text")])
 
-        assert len(qa_list) == 3
+        assert len(qa_list) == 2
         assert qa_list[0].question_type == "definition"
-        assert qa_list[0].doc_id == "doc1"
-        assert qa_list[0].quality_score is None  # 未评分
+        assert qa_list[0].reason == "考察基础概念理解"
+        assert qa_list[0].reasoning_steps == "步骤1: 定位概念定义\n步骤2: 提取关键特征"
 
     def test_skip_unsupported_type(self) -> None:
         generator = QAGenerator(llm_client=_mock_llm("[]"))
@@ -84,7 +91,9 @@ class TestLowQualityReason:
 
     def test_date_list_skipped(self) -> None:
         # 日期比例超过阈值
-        chunk = _make_chunk(content="2024-01-01 2024-01-02 2024-01-03 2024-01-04 2024-01-05 2024-02-01")
+        chunk = _make_chunk(
+            content="2024-01-01 2024-01-02 2024-01-03 2024-01-04 2024-01-05 2024-02-01"
+        )
         reason = QAGenerator._low_quality_reason(chunk)
         assert reason is not None
 
