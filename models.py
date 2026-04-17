@@ -140,11 +140,14 @@ class QAPair:
 
     question: str
     answer: str
-    context: str                     # 原始 chunk 内容，作为 RAG 上下文
+    context: str  # 原始 chunk 内容，作为 RAG 上下文
 
-    question_type: str               # definition / reasoning / comparison /
+    question_type: str  # definition / reasoning / comparison /
     #                                  procedure / fact / summary / description
-    content_type: str                # text / table / image_caption
+    content_type: str  # text / table / image_caption
+
+    reason: str = ""  # LLM 出题理由
+    reasoning_steps: str = ""  # 推理步骤 / 多跳推理链（多行文本）
 
     # 质量评分（qa_filtering 填充）
     quality_score: Optional[float] = None
@@ -167,7 +170,7 @@ class QAPair:
 class QualityThresholds:
     """质量过滤阈值配置（不可变）。"""
 
-    faithfulness_min: float = 0.60   # NLI entailment 最低分
-    relevance_min: float = 0.50      # Q-A 余弦相似度最低分
-    answer_min_length: int = 15      # 答案最少字符数（中文）
-    composite_pass: float = 0.55     # 综合加权分通过线
+    faithfulness_min: float = 0.60  # NLI entailment 最低分
+    relevance_min: float = 0.50  # Q-A 余弦相似度最低分
+    answer_min_length: int = 15  # 答案最少字符数（中文）
+    composite_pass: float = 0.55  # 综合加权分通过线

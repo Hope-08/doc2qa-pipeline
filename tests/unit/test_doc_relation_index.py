@@ -1,4 +1,5 @@
 """单元测试：doc_relation_index 文档关系索引构建。"""
+
 from __future__ import annotations
 
 from models import EnrichedChunk

@@ -37,10 +37,13 @@ def _langchain_patch():
     mock_lc = MagicMock()
     mock_lc_msg = MagicMock()
     mock_lc_msg.HumanMessage = MagicMock(side_effect=lambda content: content)
-    return patch.dict("sys.modules", {
-        "langchain_core": mock_lc,
-        "langchain_core.messages": mock_lc_msg,
-    })
+    return patch.dict(
+        "sys.modules",
+        {
+            "langchain_core": mock_lc,
+            "langchain_core.messages": mock_lc_msg,
+        },
+    )
 
 
 def _make_mock_llm(scores: list[dict]) -> MagicMock:
@@ -70,7 +73,9 @@ class TestScoreCompleteness:
 
     def test_medium_answer_with_period(self):
         """50~200 字符、有句号，得分应接近最高。"""
-        answer = "深度学习是机器学习的子领域，使用多层神经网络从原始数据中自动学习层次化特征表示。" * 2
+        answer = (
+            "深度学习是机器学习的子领域，使用多层神经网络从原始数据中自动学习层次化特征表示。" * 2
+        )
         score = QualityScorer._score_completeness(answer)
         assert score >= 0.8
 
@@ -204,16 +209,15 @@ class TestScoreBatch:
 
     def test_llm_unavailable_uses_default_faithfulness(self):
         """LLM 不可用时，faithfulness 使用默认值 0.5，评分仍正常执行。"""
-        qa = _make_qa(
-            answer="深度学习是机器学习的一个分支，使用多层神经网络处理数据。"
-        )
+        qa = _make_qa(answer="深度学习是机器学习的一个分支，使用多层神经网络处理数据。")
         scorer = QualityScorer()
         embedder = MagicMock()
         embedder.embed_documents.return_value = [[1.0, 0.0], [1.0, 0.0]]
         scorer._embedder = embedder
 
-        with patch("qa_filtering.quality_scorer.QualityScorer._get_llm",
-                   side_effect=ImportError("no llm")):
+        with patch(
+            "qa_filtering.quality_scorer.QualityScorer._get_llm", side_effect=ImportError("no llm")
+        ):
             result = scorer.score_batch([qa])
 
         # 不报错，faithfulness 为 0.5

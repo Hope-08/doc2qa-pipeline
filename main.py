@@ -37,7 +37,8 @@ def cli(debug: bool) -> None:
 
 @cli.command("run")
 @click.option(
-    "--input", "-i",
+    "--input",
+    "-i",
     required=True,
     multiple=True,
     type=click.Path(exists=True),
@@ -45,12 +46,14 @@ def cli(debug: bool) -> None:
 )
 @click.option("--output", "-o", default=None, help="输出数据集路径")
 @click.option(
-    "--model", "-m",
+    "--model",
+    "-m",
     default=None,
     help="LLM 模型名称，如 gpt-4o、qwen2.5-72b-instruct",
 )
 @click.option(
-    "--format", "-f",
+    "--format",
+    "-f",
     "export_format",
     default="jsonl",
     type=click.Choice(["jsonl", "hf_dataset", "alpaca", "ragas"]),
@@ -97,6 +100,7 @@ def run_cmd(
     )
 
     from config.settings import settings
+
     job_dir = Path(settings.output_dir).resolve() / job_id
     click.echo(f"完成！生成 {len(result)} 个高质量 QA 对。")
     click.echo(f"中间结果目录：{job_dir}")

@@ -32,7 +32,9 @@ def sample_table_item() -> ContentItem:
 
 
 @pytest.fixture
-def sample_parsed_document(sample_content_item: ContentItem, sample_table_item: ContentItem) -> ParsedDocument:
+def sample_parsed_document(
+    sample_content_item: ContentItem, sample_table_item: ContentItem
+) -> ParsedDocument:
     return ParsedDocument(
         doc_id="doc1",
         source_path="doc1.pdf",

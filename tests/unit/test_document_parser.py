@@ -13,6 +13,7 @@ from parsing.document_parser import DocumentParser
 # 辅助：构造 fitz.open mock（PyMuPDF）
 # ---------------------------------------------------------------------------
 
+
 def _make_fitz_doc(pages: list[list[tuple]]) -> MagicMock:
     """构造 fitz.open 返回的 mock Document。
 
@@ -23,9 +24,11 @@ def _make_fitz_doc(pages: list[list[tuple]]) -> MagicMock:
         page = MagicMock()
         page.get_text.return_value = " ".join(b[4] for b in blocks if len(b) >= 5)
         page.__iter__ = MagicMock(return_value=iter([]))
-        page.get_text = MagicMock(side_effect=lambda mode="", b=blocks: (
-            " ".join(blk[4] for blk in b if len(blk) >= 5) if mode != "blocks" else b
-        ))
+        page.get_text = MagicMock(
+            side_effect=lambda mode="", b=blocks: (
+                " ".join(blk[4] for blk in b if len(blk) >= 5) if mode != "blocks" else b
+            )
+        )
         mock_pages.append(page)
 
     doc = MagicMock()
@@ -39,6 +42,7 @@ def _make_fitz_doc(pages: list[list[tuple]]) -> MagicMock:
 # ---------------------------------------------------------------------------
 # 辅助：构造 docling 结果 mock
 # ---------------------------------------------------------------------------
+
 
 def _make_docling_result(items: list[dict]) -> MagicMock:
     """构造 DocumentConverter().convert() 的返回值 mock。
@@ -74,6 +78,7 @@ def _make_docling_result(items: list[dict]) -> MagicMock:
 # 辅助：构造 unstructured partition mock
 # ---------------------------------------------------------------------------
 
+
 def _make_unstructured_elements(texts: list[str]) -> list[MagicMock]:
     elements = []
     for i, text in enumerate(texts):
@@ -108,9 +113,7 @@ class TestDocumentParser:
         fitz_doc = MagicMock()
         fitz_doc.__len__ = MagicMock(return_value=1)
         page = MagicMock()
-        page.get_text = MagicMock(side_effect=lambda mode="": (
-            long_text if mode == "" else blocks
-        ))
+        page.get_text = MagicMock(side_effect=lambda mode="": (long_text if mode == "" else blocks))
         fitz_doc.__iter__ = MagicMock(return_value=iter([page]))
         fitz_doc.__enter__ = MagicMock(return_value=fitz_doc)
         fitz_doc.__exit__ = MagicMock(return_value=False)
@@ -137,9 +140,7 @@ class TestDocumentParser:
         fitz_doc = MagicMock()
         fitz_doc.__len__ = MagicMock(return_value=1)
         page = MagicMock()
-        page.get_text = MagicMock(side_effect=lambda mode="": (
-            long if mode == "" else blocks
-        ))
+        page.get_text = MagicMock(side_effect=lambda mode="": (long if mode == "" else blocks))
         fitz_doc.__iter__ = MagicMock(return_value=iter([page]))
         fitz_doc.__enter__ = MagicMock(return_value=fitz_doc)
         fitz_doc.__exit__ = MagicMock(return_value=False)
@@ -169,13 +170,21 @@ class TestDocumentParser:
         fitz_doc.__enter__ = MagicMock(return_value=fitz_doc)
         fitz_doc.__exit__ = MagicMock(return_value=False)
 
-        docling_result = _make_docling_result([
-            {"label": "text", "text": "OCR后识别出的内容，这是一段来自扫描件的文字。", "page_no": 0}
-        ])
+        docling_result = _make_docling_result(
+            [
+                {
+                    "label": "text",
+                    "text": "OCR后识别出的内容，这是一段来自扫描件的文字。",
+                    "page_no": 0,
+                }
+            ]
+        )
 
-        with patch("fitz.open", return_value=fitz_doc), \
-             patch("ocrmypdf.ocr") as mock_ocr, \
-             patch("docling.document_converter.DocumentConverter") as MockConverter:
+        with (
+            patch("fitz.open", return_value=fitz_doc),
+            patch("ocrmypdf.ocr") as mock_ocr,
+            patch("docling.document_converter.DocumentConverter") as MockConverter,
+        ):
             MockConverter.return_value.convert.return_value = docling_result
             parser = DocumentParser(backend="auto", ocr_lang="chi_sim+eng")
             result = parser.parse(str(doc_file))
@@ -195,9 +204,15 @@ class TestDocumentParser:
         doc_file = tmp_path / "report.docx"
         doc_file.write_bytes(b"PK fake docx")
 
-        docling_result = _make_docling_result([
-            {"label": "text", "text": "这是一份Word文档的测试内容，用于验证docling解析。", "page_no": 0}
-        ])
+        docling_result = _make_docling_result(
+            [
+                {
+                    "label": "text",
+                    "text": "这是一份Word文档的测试内容，用于验证docling解析。",
+                    "page_no": 0,
+                }
+            ]
+        )
 
         with patch("docling.document_converter.DocumentConverter") as MockConverter:
             MockConverter.return_value.convert.return_value = docling_result
@@ -212,9 +227,15 @@ class TestDocumentParser:
         img_file = tmp_path / "chart.png"
         img_file.write_bytes(b"\x89PNG\r\n fake")
 
-        docling_result = _make_docling_result([
-            {"label": "text", "text": "图片中识别出的文字内容，来自OCR引擎处理结果。", "page_no": 0}
-        ])
+        docling_result = _make_docling_result(
+            [
+                {
+                    "label": "text",
+                    "text": "图片中识别出的文字内容，来自OCR引擎处理结果。",
+                    "page_no": 0,
+                }
+            ]
+        )
 
         with patch("docling.document_converter.DocumentConverter") as MockConverter:
             MockConverter.return_value.convert.return_value = docling_result
@@ -232,7 +253,9 @@ class TestDocumentParser:
         txt_file = tmp_path / "data.txt"
         txt_file.write_text("这是一段纯文本内容，用于测试unstructured解析引擎。")
 
-        elements = _make_unstructured_elements(["这是一段纯文本内容，用于测试unstructured解析引擎。"])
+        elements = _make_unstructured_elements(
+            ["这是一段纯文本内容，用于测试unstructured解析引擎。"]
+        )
 
         with patch("unstructured.partition.auto.partition", return_value=elements):
             parser = DocumentParser(backend="auto")
@@ -275,9 +298,7 @@ class TestDocumentParser:
         fitz_doc = MagicMock()
         fitz_doc.__len__ = MagicMock(return_value=1)
         page = MagicMock()
-        page.get_text = MagicMock(side_effect=lambda mode="": (
-            long_text if mode == "" else blocks
-        ))
+        page.get_text = MagicMock(side_effect=lambda mode="": (long_text if mode == "" else blocks))
         fitz_doc.__iter__ = MagicMock(return_value=iter([page]))
         fitz_doc.__enter__ = MagicMock(return_value=fitz_doc)
         fitz_doc.__exit__ = MagicMock(return_value=False)
@@ -310,9 +331,7 @@ class TestDocumentParser:
         fitz_doc = MagicMock()
         fitz_doc.__len__ = MagicMock(return_value=1)
         page = MagicMock()
-        page.get_text = MagicMock(side_effect=lambda mode="": (
-            text if mode == "" else blocks
-        ))
+        page.get_text = MagicMock(side_effect=lambda mode="": (text if mode == "" else blocks))
         fitz_doc.__iter__ = MagicMock(return_value=iter([page]))
         fitz_doc.__enter__ = MagicMock(return_value=fitz_doc)
         fitz_doc.__exit__ = MagicMock(return_value=False)
@@ -338,13 +357,15 @@ class TestDocumentParser:
         fitz_doc.__enter__ = MagicMock(return_value=fitz_doc)
         fitz_doc.__exit__ = MagicMock(return_value=False)
 
-        docling_result = _make_docling_result([
-            {"label": "text", "text": "OCR内容文字足够长。" * 3, "page_no": 1}
-        ])
+        docling_result = _make_docling_result(
+            [{"label": "text", "text": "OCR内容文字足够长。" * 3, "page_no": 1}]
+        )
 
-        with patch("fitz.open", return_value=fitz_doc), \
-             patch("ocrmypdf.ocr") as mock_ocr, \
-             patch("docling.document_converter.DocumentConverter") as MockConverter:
+        with (
+            patch("fitz.open", return_value=fitz_doc),
+            patch("ocrmypdf.ocr") as mock_ocr,
+            patch("docling.document_converter.DocumentConverter") as MockConverter,
+        ):
             MockConverter.return_value.convert.return_value = docling_result
             parser = DocumentParser(backend="auto", ocr_lang="chi_sim+eng")
             parser.parse(str(doc_file))
@@ -359,9 +380,9 @@ class TestDocumentParser:
         doc_file.write_bytes(b"PK")
 
         # docling 真实 page_no 从 1 开始
-        docling_result = _make_docling_result([
-            {"label": "text", "text": "第二页的内容，足够长的文字。" * 2, "page_no": 2}
-        ])
+        docling_result = _make_docling_result(
+            [{"label": "text", "text": "第二页的内容，足够长的文字。" * 2, "page_no": 2}]
+        )
 
         with patch("docling.document_converter.DocumentConverter") as MockConverter:
             MockConverter.return_value.convert.return_value = docling_result
@@ -398,9 +419,7 @@ class TestDocumentParser:
         fitz_doc = MagicMock()
         fitz_doc.__len__ = MagicMock(return_value=1)
         page = MagicMock()
-        page.get_text = MagicMock(side_effect=lambda mode="": (
-            text if mode == "" else blocks
-        ))
+        page.get_text = MagicMock(side_effect=lambda mode="": (text if mode == "" else blocks))
         fitz_doc.__iter__ = MagicMock(return_value=iter([page]))
         fitz_doc.__enter__ = MagicMock(return_value=fitz_doc)
         fitz_doc.__exit__ = MagicMock(return_value=False)
@@ -420,7 +439,11 @@ class TestDocumentParser:
         # 构造包含 section_header label 的 docling 结果
         items_def = [
             {"label": "section_header", "text": "第一章：引言与背景", "page_no": 1},
-            {"label": "text", "text": "这是引言部分的正文内容，足够长的文字供测试使用。", "page_no": 1},
+            {
+                "label": "text",
+                "text": "这是引言部分的正文内容，足够长的文字供测试使用。",
+                "page_no": 1,
+            },
         ]
         docling_result = _make_docling_result(items_def)
 
@@ -457,12 +480,8 @@ class TestDocumentParser:
         # heading block 字号 24，body block 字号 12（比例 >= 1.2 应被判定为 heading）
         dict_result = {
             "blocks": [
-                {
-                    "lines": [{"spans": [{"size": 24.0, "text": heading_text}]}]
-                },
-                {
-                    "lines": [{"spans": [{"size": 12.0, "text": body_text}]}]
-                },
+                {"lines": [{"spans": [{"size": 24.0, "text": heading_text}]}]},
+                {"lines": [{"spans": [{"size": 12.0, "text": body_text}]}]},
             ]
         }
 

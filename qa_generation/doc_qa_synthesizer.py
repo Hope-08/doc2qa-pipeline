@@ -180,7 +180,9 @@ class DocumentQASynthesizer:
 
             # multi_hop 必须有 >= 2 个合法 source chunks
             if q_type == "multi_hop" and len(valid_sources) < 2:
-                logger.debug("丢弃伪多跳（source_chunks 数量=%d）：%s", len(valid_sources), question[:60])
+                logger.debug(
+                    "丢弃伪多跳（source_chunks 数量=%d）：%s", len(valid_sources), question[:60]
+                )
                 continue
 
             # 规范化 key_entities
@@ -214,6 +216,8 @@ class DocumentQASynthesizer:
                     context=context,
                     question_type=q_type,
                     content_type="text",
+                    reason=str(item.get("reason", "")).strip(),
+                    reasoning_steps=str(item.get("reasoning_steps", "")).strip(),
                     metadata={
                         "source_chunks": valid_sources,
                         "key_entities": key_entities,

@@ -26,6 +26,8 @@ def _make_qa(idx: int = 0) -> QAPair:
         faithfulness_score=0.90,
         relevance_score=0.75,
         completeness_score=0.80,
+        reason=f"出题理由 {idx}",
+        reasoning_steps="步骤1: ...\n步骤2: ...",
         is_passed=True,
     )
 

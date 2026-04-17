@@ -190,13 +190,14 @@ class SemanticChunker:
         中文引号后的标点（如 。"）先切分在 。 处，下一句以 " 开头，
         属于常见场景，对语义边界检测影响可接受。
         """
-        parts = re.split(r'(?<=[。！？.!?])\s*', text)
+        parts = re.split(r"(?<=[。！？.!?])\s*", text)
         return [p for p in parts if p.strip()]
 
     def _get_embedder(self):
         """延迟初始化 OpenAIEmbeddings。"""
         if self._embedder is None:
             from langchain_openai import OpenAIEmbeddings
+
             logger.info("初始化 OpenAI embedding 模型：%s", self.embedding_model)
             self._embedder = OpenAIEmbeddings(model=self.embedding_model)
         return self._embedder

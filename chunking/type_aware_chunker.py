@@ -120,15 +120,17 @@ class TypeAwareChunker:
                 if item.type in _SKIP_TYPES:
                     continue
                 content_type = _IMAGE_CONTENT_TYPE if item.type == "image" else item.type
-                chunks.append(SemanticChunk(
-                    chunk_id=f"{parsed_doc.doc_id}_chunk_{chunk_idx}",
-                    doc_id=parsed_doc.doc_id,
-                    content_type=content_type,
-                    content=item.content,
-                    source_items=[item.item_id],
-                    page_idx=item.page_idx,
-                    token_count=len(item.content),
-                ))
+                chunks.append(
+                    SemanticChunk(
+                        chunk_id=f"{parsed_doc.doc_id}_chunk_{chunk_idx}",
+                        doc_id=parsed_doc.doc_id,
+                        content_type=content_type,
+                        content=item.content,
+                        source_items=[item.item_id],
+                        page_idx=item.page_idx,
+                        token_count=len(item.content),
+                    )
+                )
                 chunk_idx += 1
             else:
                 sub_texts = text_chunk_map.get(text_group_idx, [text])
@@ -136,15 +138,17 @@ class TypeAwareChunker:
                 page_idx = items[0].page_idx
                 for sub in sub_texts:
                     if sub.strip():
-                        chunks.append(SemanticChunk(
-                            chunk_id=f"{parsed_doc.doc_id}_chunk_{chunk_idx}",
-                            doc_id=parsed_doc.doc_id,
-                            content_type="text",
-                            content=sub,
-                            source_items=source_ids,
-                            page_idx=page_idx,
-                            token_count=len(sub),
-                        ))
+                        chunks.append(
+                            SemanticChunk(
+                                chunk_id=f"{parsed_doc.doc_id}_chunk_{chunk_idx}",
+                                doc_id=parsed_doc.doc_id,
+                                content_type="text",
+                                content=sub,
+                                source_items=source_ids,
+                                page_idx=page_idx,
+                                token_count=len(sub),
+                            )
+                        )
                         chunk_idx += 1
                 text_group_idx += 1
 

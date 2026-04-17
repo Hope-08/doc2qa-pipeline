@@ -11,7 +11,9 @@ from models import QAPair
 from qa_filtering.deduplicator import Deduplicator
 
 
-def _make_qa(question: str, answer: str = "答案内容。", qa_id: str = "qa_0", quality_score: float = 0.8) -> QAPair:
+def _make_qa(
+    question: str, answer: str = "答案内容。", qa_id: str = "qa_0", quality_score: float = 0.8
+) -> QAPair:
     return dataclasses.replace(
         QAPair(
             qa_id=qa_id,
@@ -154,8 +156,14 @@ class TestQuestionAnswerDedup:
 
     def test_same_question_different_answer_kept(self):
         """相同问题但答案不同时，联合文本相似度低，应都保留。"""
-        qa1 = _make_qa("深度学习有哪些优势？", answer="深度学习能自动提取特征，减少人工工程。", qa_id="qa_1")
-        qa2 = _make_qa("深度学习有哪些优势？", answer="深度学习在大数据场景下比传统方法准确率更高。", qa_id="qa_2")
+        qa1 = _make_qa(
+            "深度学习有哪些优势？", answer="深度学习能自动提取特征，减少人工工程。", qa_id="qa_1"
+        )
+        qa2 = _make_qa(
+            "深度学习有哪些优势？",
+            answer="深度学习在大数据场景下比传统方法准确率更高。",
+            qa_id="qa_2",
+        )
 
         # 模拟：联合文本 Q+A 的向量差异较大（正交）
         vectors = [[1.0, 0.0], [0.0, 1.0]]

@@ -38,11 +38,21 @@ _OFFICE_SUFFIXES = {".docx", ".doc"}
 _HEADING_LABELS: frozenset[str] = frozenset({"title", "section_header", "heading", "header"})
 
 # docling 可映射为 text 类型的所有已知 label（用于检测 API 变更）
-_KNOWN_TEXT_LABELS = frozenset({
-    "text", "paragraph", "section_header", "list_item",
-    "code", "formula", "footnote", "caption", "page_header",
-    "page_footer", "title",
-})
+_KNOWN_TEXT_LABELS = frozenset(
+    {
+        "text",
+        "paragraph",
+        "section_header",
+        "list_item",
+        "code",
+        "formula",
+        "footnote",
+        "caption",
+        "page_header",
+        "page_footer",
+        "title",
+    }
+)
 
 
 def _detect_block_type(max_font_size: float, body_font_size: float) -> str:
@@ -219,15 +229,17 @@ class DocumentParser:
                     else:
                         item_type = "text"
 
-                    content_items.append(ContentItem(
-                        item_id=f"{doc_id}_item_{idx}",
-                        doc_id=doc_id,
-                        type=item_type,
-                        content=text,
-                        page_idx=page_num,
-                        bbox=tuple(block[:4]),
-                        metadata={},
-                    ))
+                    content_items.append(
+                        ContentItem(
+                            item_id=f"{doc_id}_item_{idx}",
+                            doc_id=doc_id,
+                            type=item_type,
+                            content=text,
+                            page_idx=page_num,
+                            bbox=tuple(block[:4]),
+                            metadata={},
+                        )
+                    )
                     markdown_parts.append(text)
                     idx += 1
 
@@ -282,7 +294,9 @@ class DocumentParser:
                 item_type = "text"
                 # 记录非标准 text 类型的 label，便于发现 docling API 变更
                 if label_str not in _KNOWN_TEXT_LABELS:
-                    logger.debug("[%s] 未识别的 docling label '%s'，按 text 处理", doc_id, label_str)
+                    logger.debug(
+                        "[%s] 未识别的 docling label '%s'，按 text 处理", doc_id, label_str
+                    )
 
             content = str(content).strip()
             if not content or len(content) < _MIN_CONTENT_LENGTH:
@@ -293,19 +307,25 @@ class DocumentParser:
             raw_page_no = prov[0].get("page_no", 1) if prov else 1
             page_idx = max(raw_page_no - 1, 0)
 
-            content_items.append(ContentItem(
-                item_id=f"{doc_id}_item_{idx}",
-                doc_id=doc_id,
-                type=item_type,
-                content=content,
-                page_idx=page_idx,
-                metadata={},
-            ))
+            content_items.append(
+                ContentItem(
+                    item_id=f"{doc_id}_item_{idx}",
+                    doc_id=doc_id,
+                    type=item_type,
+                    content=content,
+                    page_idx=page_idx,
+                    metadata={},
+                )
+            )
             if item_type == "text":
                 markdown_parts.append(content)
             idx += 1
 
-        markdown = dl_doc.export_to_markdown() if hasattr(dl_doc, "export_to_markdown") else "\n\n".join(markdown_parts)
+        markdown = (
+            dl_doc.export_to_markdown()
+            if hasattr(dl_doc, "export_to_markdown")
+            else "\n\n".join(markdown_parts)
+        )
 
         logger.info("docling 解析完成 [%s]：%d 个内容项", doc_id, len(content_items))
 
@@ -343,9 +363,7 @@ class DocumentParser:
         try:
             from unstructured.partition.auto import partition
         except ImportError as exc:
-            raise ImportError(
-                "请安装 unstructured：uv sync --extra parsing"
-            ) from exc
+            raise ImportError("请安装 unstructured：uv sync --extra parsing") from exc
 
         doc_id = _make_doc_id(path)
         elements = partition(filename=str(path))
@@ -371,14 +389,16 @@ class DocumentParser:
             raw_page = element.metadata.page_number
             page_idx = max((raw_page - 1), 0) if raw_page is not None else 0
 
-            content_items.append(ContentItem(
-                item_id=f"{doc_id}_item_{idx}",
-                doc_id=doc_id,
-                type=item_type,
-                content=text,
-                page_idx=page_idx,
-                metadata={},
-            ))
+            content_items.append(
+                ContentItem(
+                    item_id=f"{doc_id}_item_{idx}",
+                    doc_id=doc_id,
+                    type=item_type,
+                    content=text,
+                    page_idx=page_idx,
+                    metadata={},
+                )
+            )
             if item_type == "text":
                 markdown_parts.append(text)
             idx += 1

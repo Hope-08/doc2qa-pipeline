@@ -1,4 +1,5 @@
 """文档级 chunk 关系索引：基于实体重叠和 embedding 相似度构建关系边。"""
+
 from __future__ import annotations
 
 import math
@@ -30,23 +31,27 @@ def build_relation_index(
     for left, right in combinations(chunks, 2):
         overlap = sorted(set(left.entities) & set(right.entities))
         if overlap:
-            relations.append({
-                "left_chunk_id": left.chunk_id,
-                "right_chunk_id": right.chunk_id,
-                "relation_type": "entities_overlap",
-                "signal": overlap,
-            })
+            relations.append(
+                {
+                    "left_chunk_id": left.chunk_id,
+                    "right_chunk_id": right.chunk_id,
+                    "relation_type": "entities_overlap",
+                    "signal": overlap,
+                }
+            )
             continue
         left_vec = embedding_vectors.get(left.chunk_id)
         right_vec = embedding_vectors.get(right.chunk_id)
         similarity = _cosine(left_vec, right_vec)
         if similarity >= similarity_threshold:
-            relations.append({
-                "left_chunk_id": left.chunk_id,
-                "right_chunk_id": right.chunk_id,
-                "relation_type": "summary_similarity",
-                "signal": [round(similarity, 4)],
-            })
+            relations.append(
+                {
+                    "left_chunk_id": left.chunk_id,
+                    "right_chunk_id": right.chunk_id,
+                    "relation_type": "summary_similarity",
+                    "signal": [round(similarity, 4)],
+                }
+            )
     return relations
 
 

@@ -46,7 +46,7 @@ class QualityScorer:
         self.thresholds = thresholds or QualityThresholds()
         self.batch_size = batch_size
 
-        self._llm: object = None       # 延迟加载
+        self._llm: object = None  # 延迟加载
         self._embedder: object = None  # 延迟加载
 
     # ------------------------------------------------------------------
@@ -101,15 +101,17 @@ class QualityScorer:
             if is_passed:
                 passed += 1
 
-            scored.append(dataclasses.replace(
-                qa,
-                faithfulness_score=round(fs, 4),
-                relevance_score=round(rs, 4),
-                completeness_score=round(cs, 4),
-                quality_score=round(composite, 4),
-                fail_reasons=fail_reasons,
-                is_passed=is_passed,
-            ))
+            scored.append(
+                dataclasses.replace(
+                    qa,
+                    faithfulness_score=round(fs, 4),
+                    relevance_score=round(rs, 4),
+                    completeness_score=round(cs, 4),
+                    quality_score=round(composite, 4),
+                    fail_reasons=fail_reasons,
+                    is_passed=is_passed,
+                )
+            )
 
         logger.info(
             "评分完成：通过 %d/%d（%.1f%%）",
@@ -187,6 +189,7 @@ class QualityScorer:
     def _get_llm(self):
         if self._llm is None:
             from langchain_openai import ChatOpenAI
+
             logger.info("初始化 faithfulness LLM：%s", self.nli_model)
             self._llm = ChatOpenAI(model=self.nli_model, temperature=0)
         return self._llm
@@ -194,6 +197,7 @@ class QualityScorer:
     def _get_embedder(self):
         if self._embedder is None:
             from langchain_openai import OpenAIEmbeddings
+
             logger.info("初始化 OpenAI embedding 模型：%s", self.embedding_model)
             self._embedder = OpenAIEmbeddings(model=self.embedding_model)
         return self._embedder

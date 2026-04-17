@@ -1,4 +1,5 @@
 """单元测试：DocumentQASynthesizer 文档级 QA 合成器。"""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -241,12 +242,12 @@ def test_is_too_easy_returns_false_when_verifier_vague(monkeypatch) -> None:
     assert result is False
 
 
-def test_is_too_easy_returns_true_when_verifier_gives_specific_confident_answer(monkeypatch) -> None:
+def test_is_too_easy_returns_true_when_verifier_gives_specific_confident_answer(
+    monkeypatch,
+) -> None:
     """verifier 给出高置信具体答案时判定为常识题，应过滤。"""
     synthesizer = _make_synthesizer(monkeypatch)
-    synthesizer._verify_llm.invoke.return_value = MagicMock(
-        content="中国的首都是北京。"
-    )
+    synthesizer._verify_llm.invoke.return_value = MagicMock(content="中国的首都是北京。")
     qa = _make_qa_pair("中国的首都是哪里？", "北京。")
     result = synthesizer._is_too_easy(qa)
     assert result is True
@@ -259,3 +260,51 @@ def test_is_too_easy_returns_false_on_dont_know(monkeypatch) -> None:
     qa = _make_qa_pair("该文档中提到的第三条路线是什么？", "内容详见原文。")
     result = synthesizer._is_too_easy(qa)
     assert result is False
+
+
+# ─── _parse_qa_pairs 解析新字段 ──────────────────────────────────────────────
+
+
+def test_parse_qa_pairs_with_new_fields(monkeypatch) -> None:
+    """解析包含 reason 和 reasoning_steps 的 QA。"""
+    synthesizer = _make_synthesizer(monkeypatch)
+    chunks = [
+        EnrichedChunk(
+            chunk_id="c1",
+            doc_id="d1",
+            content_type="text",
+            content="测试内容1",
+            source_items=[],
+            page_idx=0,
+            token_count=10,
+            entities=["实体A"],
+            summary="摘要1",
+        ),
+        EnrichedChunk(
+            chunk_id="c2",
+            doc_id="d1",
+            content_type="text",
+            content="测试内容2",
+            source_items=[],
+            page_idx=0,
+            token_count=10,
+            entities=["实体B"],
+            summary="摘要2",
+        ),
+    ]
+
+    raw_json = """[{
+        "question": "实体A和实体B有什么关联？",
+        "answer": "它们共同说明了某个概念",
+        "question_type": "multi_hop",
+        "source_chunks": ["c1", "c2"],
+        "key_entities": ["实体A", "实体B"],
+        "reason": "考察跨块关联推理",
+        "reasoning_steps": "步骤1: 从c1获取实体A信息\\n步骤2: 从c2获取实体B信息\\n步骤3: 综合分析"
+    }]"""
+
+    qa_pairs = synthesizer._parse_qa_pairs(raw_json, chunks)
+
+    assert len(qa_pairs) == 1
+    assert qa_pairs[0].reason == "考察跨块关联推理"
+    assert "步骤1" in qa_pairs[0].reasoning_steps
